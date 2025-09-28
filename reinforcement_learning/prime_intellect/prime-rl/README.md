@@ -103,6 +103,19 @@ uv run sft @ examples/wordle/sft/train.toml \
   --weights
 
 
+uv run sft @ examples/wordle/sft/train.toml --wandb.project dwani.ai --wandb.name wordle-sft --weights
+
  uv run hf upload <user>/Qwen3-1.7B-Wordle-SFT outputs/weights/step_20
 
  uv run hf upload gaganyatri/SmolLM2-135M-Instruct-Wordle-SFT outputs/weights/step_20 
+
+---
+
+# Run this in the `Trainer` pane
+uv run rl \
+  --trainer @ examples/wordle/rl/train.toml \
+  --orchestrator @ examples/wordle/rl/orch.toml \
+  --inference @ examples/wordle/rl/infer.toml \
+  --model.name gaganyatri/SmolLM2-135M-Instruct-Wordle-SFT \
+  --wandb.project dwani.ai \
+  --wandb.name wordle-rl
