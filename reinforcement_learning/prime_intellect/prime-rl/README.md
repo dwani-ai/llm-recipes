@@ -79,3 +79,30 @@ uv run vf-eval reverse-text -m HuggingFaceTB/SmolLM2-135M-Instruct -b http://loc
 
 
 uv run sft @ examples/reverse_text/sft/train.toml
+
+---
+Wordle
+
+uv pip install prime
+prime env install will/wordle
+
+uv run inference --model.name HuggingFaceTB/SmolLM2-135M-Instruct
+
+# Run this in the `Trainer` pane
+uv run vf-eval wordle -m HuggingFaceTB/SmolLM2-135M-Instruct -b http://localhost:8000/v1 -n 20 --max-tokens 1024
+
+-- 
+sft 
+
+uv run sft @ examples/wordle/sft/train.toml
+
+# In the `Trainer` pane
+uv run sft @ examples/wordle/sft/train.toml \
+  --wandb.project ... \
+  --wandb.name ... \
+  --weights
+
+
+ uv run hf upload <user>/Qwen3-1.7B-Wordle-SFT outputs/weights/step_20
+
+ uv run hf upload gaganyatri/SmolLM2-135M-Instruct-Wordle-SFT outputs/weights/step_20 
