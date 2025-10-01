@@ -52,6 +52,8 @@ uv run trainer @ configs/debug/rl/train.toml
 uv run inference @ configs/debug/infer.toml
 
 
+- Run orchestrator with inference
+  - uv run orchestrator @ configs/debug/orch.toml
 
 --
 
