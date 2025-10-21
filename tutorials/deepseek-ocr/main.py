@@ -37,34 +37,42 @@ async def ocr_image(file: UploadFile = File(..., description="Image file (e.g., 
         image_path = tmp_file.name
     
     try:
-        # Run inference
-        # Note: Set save_results=False to avoid saving files; assume res contains the text output
-        res = model.infer(
-            tokenizer, 
-            prompt=prompt, 
-            image_file=image_path, 
-            output_path='',  # No output dir needed for API
-            base_size=1024, 
-            image_size=640, 
-            crop_mode=True, 
-            save_results=False,  # Disable saving
-            test_compress=True
-        )
-        
-        # Assume res is the markdown text string; adjust if it's a dict (e.g., res['text'])
-        if isinstance(res, dict):
-            markdown_text = res.get('text', str(res))
-        else:
-            markdown_text = str(res)
-        
-        return JSONResponse(content={"markdown": markdown_text})
+        # Create temporary output directory
+        with tempfile.TemporaryDirectory() as temp_output_dir:
+            # Run inference with valid output path
+            res = model.infer(
+                tokenizer, 
+                prompt=prompt, 
+                image_file=image_path, 
+                output_path=temp_output_dir,  # Use temp dir
+                base_size=1024, 
+                image_size=640, 
+                crop_mode=True, 
+                save_results=True,  # Enable saving to capture output
+                test_compress=True
+            )
+            
+            # Check for saved output files (assuming .md or .json)
+            output_files = [f for f in os.listdir(temp_output_dir) if f.endswith(('.md', '.json', '.txt'))]
+            if output_files:
+                with open(os.path.join(temp_output_dir, output_files[0]), 'r', encoding='utf-8') as f:
+                    markdown_text = f.read()
+            else:
+                # Fallback if no file saved, assume res contains the text
+                if isinstance(res, dict):
+                    markdown_text = res.get('text', str(res))
+                else:
+                    markdown_text = str(res)
+            
+            return JSONResponse(content={"markdown": markdown_text})
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
     
     finally:
-        # Clean up temp file
-        os.unlink(image_path)
+        # Clean up temp image file
+        if os.path.exists(image_path):
+            os.unlink(image_path)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
