@@ -1,0 +1,46 @@
+services:
+  vllm:
+    build:
+      context: .
+      dockerfile: vllm.Dockerfile
+    command: [
+      "--model", "deepseek-ai/DeepSeek-OCR",
+      "--served-model-name", "gemma3",
+      "--host", "0.0.0.0",
+      "--port", "9000",
+      "--gpu-memory-utilization", "0.9",
+      "--tensor-parallel-size", "1",
+      "--max-model-len", "8192",
+      "--disable-log-requests",
+      "--dtype", "bfloat16",
+      "--enable-chunked-prefill",
+      "--enable-prefix-caching",
+      "--max-num-batched-tokens", "8192",
+      "--chat-template-content-format", "openai"
+    ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - vllm
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
