@@ -1,10 +1,10 @@
 services:
-  ocr-app:
+  deepseek-ocr:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "80:8000"
     environment:
       - CUDA_VISIBLE_DEVICES=0
     deploy:
