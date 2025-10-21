@@ -1,5 +1,11 @@
 DeepSeek-OCR
 
+- docker compose -f compose.yml up -d
+
+- Test OCR at 
+    http://localhost/docs 
+
+
 deepseek-ocr  : 
 
 HF : https://huggingface.co/deepseek-ai/DeepSeek-OCR
