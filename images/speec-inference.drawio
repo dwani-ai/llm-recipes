@@ -1,0 +1,71 @@
+<mxfile host="app.diagrams.net" modified="2024-06-02T15:10:50.783Z" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0" etag="cR1ZP6K2C98fXecdECx9" version="24.4.13" type="device">
+  <diagram name="Page-1" id="9oOGH3Qfh4z9WJKQwWwQ">
+    <mxGraphModel dx="2214" dy="795" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="9BD03KB26ifjnowILL1m-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="9BD03KB26ifjnowILL1m-1" target="9BD03KB26ifjnowILL1m-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-1" value="Voice Recorder" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-40" y="320" width="100" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="9BD03KB26ifjnowILL1m-2" target="9BD03KB26ifjnowILL1m-5">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="400" y="355" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-2" value="&lt;div&gt;Whisper&lt;/div&gt;&lt;div&gt;Speech to Text&lt;br&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="320" width="110" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-4" value="&lt;div&gt;audio&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="70" y="320" width="50" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="9BD03KB26ifjnowILL1m-5" target="9BD03KB26ifjnowILL1m-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-5" value="&lt;div&gt;Tool/Prompt-&lt;/div&gt;&lt;div&gt;Creator&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="320" width="110" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-7" value="&lt;div&gt;Text/json&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="240" y="320" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="9BD03KB26ifjnowILL1m-8" target="9BD03KB26ifjnowILL1m-14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-8" value="&lt;div&gt;Ollama /&lt;/div&gt;&lt;div&gt;Mistral&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="320" width="90" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-12" value="Prompt" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="430" y="320" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="9BD03KB26ifjnowILL1m-14" target="9BD03KB26ifjnowILL1m-17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-14" value="Code Executor" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="485" y="435" width="100" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-16" value="&lt;div&gt;Function Call&amp;nbsp;&lt;/div&gt;&lt;div&gt;Parameter&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="540" y="395" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="9BD03KB26ifjnowILL1m-17" target="9BD03KB26ifjnowILL1m-20">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="495" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-17" value="Text To Speech" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="435" width="110" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-19" value="&lt;div&gt;Result/&lt;/div&gt;&lt;div&gt;json&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="420" y="425" width="60" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-20" value="Speaker" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="435" width="100" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9BD03KB26ifjnowILL1m-22" value="voice" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="250" y="430" width="50" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

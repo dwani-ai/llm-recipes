@@ -1,0 +1,595 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://slabstech.com/llm-recipes/text-to-speech.html">
+      
+      
+      
+      
+      <link rel="icon" href="images/dwani-favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Text to speech - llm-recipes</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.84d31ad4.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#docker-build-t-coqui-tts" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="index.html" title="llm-recipes" class="md-header__button md-logo" aria-label="llm-recipes" data-md-component="logo">
+      
+  <img src="images/dwani-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            llm-recipes
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Text to speech
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/slabstech/llm-recipes" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="index.html" class="md-tabs__link">
+        
+  
+  
+    
+  
+  home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="index.html" class="md-tabs__link">
+        
+  
+  
+    
+  
+  home
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="index.html" title="llm-recipes" class="md-nav__button md-logo" aria-label="llm-recipes" data-md-component="logo">
+      
+  <img src="images/dwani-logo.png" alt="logo">
+
+    </a>
+    llm-recipes
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/slabstech/llm-recipes" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#docker-build-t-coqui-tts" class="md-nav__link">
+    <span class="md-ellipsis">
+      docker build -t coqui-tts .
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docker-run-rm-it-p-50025002-coqui-tts-model_name-tts_modelsenvctkvits" class="md-nav__link">
+    <span class="md-ellipsis">
+      docker run --rm -it -p 5002:5002 coqui-tts --model_name tts_models/en/vctk/vits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#download-and-extract-the-desired-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      Download and extract the desired model(s)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Download and extract the desired model(s)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cpu-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cpu only
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/slabstech/llm-recipes/edit/master/docs/text-to-speech.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<p>Text to Speech</p>
+<ul>
+<li>
+<ul>
+<li>Clone Repo</li>
+</ul>
+</li>
+<li>git clone https://github.com/coqui-ai/TTS.git</li>
+<li>Setup virtual environment</li>
+<li>python -m venv venv</li>
+<li>source venv/bin/activate</li>
+<li>
+<p>Install TTS library</p>
+<ul>
+<li>pip install TTS</li>
+</ul>
+</li>
+<li>
+<p>Run TTS on Terminal</p>
+</li>
+<li>tts --text "Text for TTS" --out_path speech.wav</li>
+<li>
+<p>tts --text "My name is sachin shetty" --out_path speech.wav</p>
+</li>
+<li>
+<p>Docker Setup</p>
+</li>
+<li>
+<p>Reference</p>
+<ul>
+<li>https://github.com/coqui-ai/TTS</li>
+</ul>
+</li>
+</ul>
+<p>version: '3'
+services:
+  tts:
+    image: coqui/tts:latest
+    volumes:
+      - ./data:/root/.local/share/tts
+    command: tts-server --model_name tts_models/en/vctk/vits</p>
+<p>On host  machine ‐ </p>
+<p>mkdir -p data/tts_models/en/vctk/vits
+wget -P data/tts_models/en/vctk/vits https://github.com/coqui-ai/TTS/releases/download/v0.11.0/vctk-vits.zip
+unzip data/tts_models/en/vctk/vits/vctk-vits.zip -d data/tts_models/en/vctk/vits</p>
+<p>https://www.perplexity.ai/search/Coqui-ai-tts-6DlPHfrkSHmq9QB3fE_cSg</p>
+<p>Building dockerfile </p>
+<p>FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04</p>
+<p>RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends \
+    git \
+    python3 \
+    python3-pip \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*</p>
+<p>RUN pip3 install coqui-tts</p>
+<p>WORKDIR /app</p>
+<p>ENTRYPOINT ["tts-server"]
+CMD ["--list_models"]</p>
+<hr />
+<h2 id="docker-build-t-coqui-tts">docker build -t coqui-tts .</h2>
+<h2 id="docker-run-rm-it-p-50025002-coqui-tts-model_name-tts_modelsenvctkvits">docker run --rm -it -p 5002:5002 coqui-tts --model_name tts_models/en/vctk/vits</h2>
+<p>--
+With custom model - prebuilt </p>
+<p>FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04</p>
+<p>RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends \
+    git \
+    python3 \
+    python3-pip \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*</p>
+<p>RUN pip3 install coqui-tts</p>
+<h1 id="download-and-extract-the-desired-models">Download and extract the desired model(s)</h1>
+<p>RUN mkdir -p /root/.local/share/tts/tts_models/en/vctk/vits &amp;&amp; \
+    wget -O - https://github.com/coqui-ai/TTS/releases/download/v0.11.0/vctk-vits.zip | bsdtar -xvf- -C /root/.local/share/tts/tts_models/en/vctk/vits</p>
+<p>WORKDIR /app</p>
+<p>ENTRYPOINT ["tts-server"]
+CMD ["--model_name", "tts_models/en/vctk/vits"]</p>
+<p>-- </p>
+<h2 id="cpu-only">Cpu only</h2>
+<p>FROM python:3.8-slim</p>
+<p>RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends \
+    git \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*</p>
+<p>RUN pip install coqui-tts</p>
+<p>WORKDIR /app</p>
+<p>ENTRYPOINT ["tts-server"]
+CMD ["--list_models"]</p>
+<p>--
+docker build -t coqui-tts-cpu .</p>
+<p>--
+docker run --rm -it -p 5002:5002 coqui-tts-cpu</p>
+<p>-- </p>
+<p>To optimize the Dockerfile for better performance in Coqui TTS, you can follow these steps:</p>
+<pre><code>Use a smaller base image
+</code></pre>
+<p>Instead of using the larger ubuntu:20.04 base image, consider using a more lightweight base image like python:3.8-slim or nvidia/cuda:11.3.1-cudnn8-runtime-ubuntu20.04. This can significantly reduce the overall image size.</p>
+<pre><code>Combine RUN commands
+</code></pre>
+<p>Combine multiple RUN commands into a single RUN command using &amp;&amp; to chain them together. This reduces the number of layers in the image, making it more efficient.</p>
+<p>dockerfile
+RUN apt-get update &amp;&amp; \
+    apt-get install -y --no-install-recommends \
+        git \
+        python3 \
+        python3-pip \
+        &amp;&amp; \
+    rm -rf /var/lib/apt/lists/*</p>
+<pre><code>Use multi-stage builds
+</code></pre>
+<p>Implement a multi-stage build to separate the build environment from the final runtime environment. This way, you can keep the final image lean by copying only the necessary files from the build stage.</p>
+<pre><code>Install dependencies from requirements file
+</code></pre>
+<p>Instead of installing coqui-tts directly, create a requirements.txt file with the required dependencies and install them using pip install -r requirements.txt. This allows better caching and faster builds when dependencies haven't changed.</p>
+<pre><code>Use Docker's built-in caching mechanism
+</code></pre>
+<p>Order the instructions in your Dockerfile such that the least frequently changing instructions are at the top. This way, Docker can reuse cached layers when possible, reducing build times.</p>
+<pre><code>Use NVIDIA's optimized Docker images
+</code></pre>
+<p>If you're running Coqui TTS on an NVIDIA GPU, use NVIDIA's optimized Docker images for machine learning, as they are designed for efficient model training and inference.</p>
+<pre><code>Leverage Docker volumes for data persistence
+</code></pre>
+<p>Instead of copying data into the Docker image, use Docker volumes to mount the necessary data (e.g., models, datasets) from the host machine. This keeps the image size small and allows for easy data management
+. By following these optimization techniques, you can significantly reduce the size of your Coqui TTS Docker image and improve its performance, making it more efficient for model training and inference.</p>
+<p>--</p>
+<p>Whisper with data</p>
+<p>version: '3'
+services:
+  whisper:
+    image: rhasspy/wyoming-whisper
+    command: --model base-int8 --language en
+    volumes:
+      - /path/to/host/model/data:/data
+    ports:
+      - 10300:10300</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": ".", "features": ["content.action.edit", "content.code.copy", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "search.share", "toc.follow", "content.code.copy", "content.tabs", "content.action"], "search": "assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
