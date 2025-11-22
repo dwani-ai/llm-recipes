@@ -1,0 +1,60 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0" version="29.1.1">
+  <diagram name="Page-1" id="UGIts07Iv_5Emm-0Fxsl">
+    <mxGraphModel dx="1595" dy="852" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-19" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="590" width="710" x="60" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-4" edge="1" parent="1" source="F1ijH-AV9sZWFDZR5qBP-1" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;" target="F1ijH-AV9sZWFDZR5qBP-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-7" edge="1" parent="1" source="F1ijH-AV9sZWFDZR5qBP-1" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;" target="F1ijH-AV9sZWFDZR5qBP-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Image" vertex="1">
+          <mxGeometry height="60" width="120" x="200" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="App" vertex="1">
+          <mxGeometry height="30" width="60" x="230" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-9" edge="1" parent="1" source="F1ijH-AV9sZWFDZR5qBP-3" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="180" y="600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;Garden Tool&amp;nbsp;&lt;/div&gt;&lt;div&gt;Identification&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="120" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-12" edge="1" parent="1" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="358.6875" y="470" as="sourcePoint" />
+            <mxPoint x="360" y="600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;3D Generator&lt;/div&gt;&lt;div&gt;Map of&amp;nbsp;Garden&amp;nbsp;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="170" x="270" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-18" edge="1" parent="1" source="F1ijH-AV9sZWFDZR5qBP-8" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=12;startSize=8;endSize=8;" target="F1ijH-AV9sZWFDZR5qBP-16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;Unity 3D&lt;/div&gt;&lt;div&gt;Gameplay&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="480" x="170" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-11" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;div&gt;Mower/&lt;/div&gt;&lt;div&gt;Trimmer&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="60" x="100" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-14" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;Parameters&lt;/div&gt;&lt;div&gt;Weather / Budget / Resource&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="500" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-15" edge="1" parent="1" source="F1ijH-AV9sZWFDZR5qBP-14" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.813;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;fontSize=12;startSize=8;endSize=8;" target="F1ijH-AV9sZWFDZR5qBP-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="F1ijH-AV9sZWFDZR5qBP-16" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Mobile VR" vertex="1">
+          <mxGeometry height="60" width="120" x="350" y="720" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
