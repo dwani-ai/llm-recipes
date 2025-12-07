@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install ultralytics + opencv last (latest compatible versions)
 RUN pip install --no-cache-dir \
     opencv-python-headless
-
+    
+RUN pip install python-multipart
 COPY main.py .
 
 # Create output directory (will be overridden by volume)

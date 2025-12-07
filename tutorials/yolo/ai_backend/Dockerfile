@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir \
     ultralytics \
     opencv-python-headless
 
+RUN pip install python-multipart
+
 COPY main.py .
 
 EXPOSE 8001
