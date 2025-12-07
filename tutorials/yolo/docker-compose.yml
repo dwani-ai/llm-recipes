@@ -1,0 +1,35 @@
+# docker-compose.yml
+version: "3.9"
+
+services:
+  ai-backend:
+    build: ./ai_backend
+    container_name: yolo-ai-backend
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./output:/app/output
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  ui-backend:
+    build: ./ui_backend
+    container_name: object-detection-ui
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      ai-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      - AI_BACKEND_URL=http://ai-backend:8001
+
+volumes:
+  output:

@@ -1,0 +1,3 @@
+fastapi
+uvicorn[standard]
+numpy>=1.23.0  
