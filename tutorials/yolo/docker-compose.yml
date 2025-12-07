@@ -1,6 +1,4 @@
 # docker-compose.yml
-version: "3.9"
-
 services:
   ai-backend:
     build: ./ai_backend
@@ -10,13 +8,6 @@ services:
     volumes:
       - ./output:/app/output
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
   ui-backend:
     build: ./ui_backend
     container_name: object-detection-ui
@@ -25,8 +16,7 @@ services:
     volumes:
       - ./output:/app/output
     depends_on:
-      ai-backend:
-        condition: service_healthy
+      - ai-backend
     restart: unless-stopped
     environment:
       - AI_BACKEND_URL=http://ai-backend:8001
