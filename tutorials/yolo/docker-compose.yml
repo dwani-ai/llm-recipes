@@ -1,0 +1,25 @@
+# docker-compose.yml
+services:
+  ai-backend:
+    build: ./ai_backend
+    container_name: yolo-ai-backend
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./output:/app/output
+    restart: unless-stopped
+  ui-backend:
+    build: ./ui_backend
+    container_name: object-detection-ui
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      - ai-backend
+    restart: unless-stopped
+    environment:
+      - AI_BACKEND_URL=http://ai-backend:8001
+
+volumes:
+  output:

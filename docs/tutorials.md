@@ -2,6 +2,10 @@ Tutorials
 
 
 Tutorials
+
+- v9 
+    - [YOLO](../tutorials/yolo/README.md)
+
 - v8
     - Quantisation - tensors to GGUF
         - [llama.cpp](../tutorials/llama-cpp/README.md)
