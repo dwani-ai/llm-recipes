@@ -6,4 +6,7 @@
 - OpenAI - Practical Guide to building agents
     - PDF - https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf
 
-- 
+- Whitepaper Agents
+    - https://www.kaggle.com/whitepaper-agents
+- Whitepaper Agents Companion
+    - https://www.kaggle.com/whitepaper-agent-companion
