@@ -67,20 +67,59 @@ and Safety
 
 - The LLM-as-a-Judge Paradigm
     - involves using a powerful, state-of-the-art model to evaluate the outputs of another agent.
-    - To implement this, prioritize pairwise comparison over single-scoring to mitigate the exact biases mentioned ,
+    - To implement this, prioritize pairwise comparison over single-scoring to mitigate the exact biases mentioned 
+    - [https://llm-as-a-judge.github.io/](https://llm-as-a-judge.github.io/)
 
 """
-You are an expert evaluator for a customer support chatbot. Your goal is to
-assess which of two responses is more helpful, polite, and correct.
+
+You are an expert evaluator for a customer support chatbot. 
+Your goal is to assess which of two responses is more helpful, polite, and correct.
+
 [User Query]
 "Hi, my order #12345 hasn't arrived yet."
+
 [Answer A]
 "I can see that order #12345 is currently out for delivery and should
 arrive by 5 PM today."
+
 [Answer B]
 "Order #12345 is on the truck. It will be there by 5."
-Please evaluate which answer is better. Compare them on correctness,
-helpfulness, and tone. Provide your reasoning and then output your final
+
+Please evaluate which answer is better. Compare them on correctness, helpfulness, and tone. 
+
+Provide your reasoning and then output your final
 decision in a JSON object with a "winner" key (either "A", "B", or "tie")
 and a "rationale" key.
+
 """    
+
+- Agent as Judge
+    - Plan quality: Was the plan logically structured and feasible?
+    - Tool use: Were the right tools chosen and applied correctly?
+    - Context handling: Did the agent use prior information effectively?
+
+"""
+To implement an Agent-as-a-Judge, consider feeding relevant parts of the execution
+trace object to your judge. First, configure your agent framework to log and
+export the trace, including the internal plan, the list of tools chosen, and the exact
+arguments passed
+""
+
+- Human-in-the-Loop (HITL) Evaluation
+    - Domain Expertise
+    - Interpreting Nuance
+    - Creating the "Golden Set"
+
+- User Feedback and Reviewer UI
+    - Low-friction feedback: thumbs up/down, quick sliders, or short comments.
+    - Context-rich review: feedback should be paired with the full conversation and agent’s reasoning trace.
+    - Reviewer User Interface (UI): a two-panel interface: conversation on the left, reasoning steps on the right, with inline tagging for issues like “bad plan” or “tool misuse.”
+    - Governance dashboards: aggregate feedback to highlight recurring issues and risks.
+
+- Beyond Performance: Responsible AI (RAI) & Safety Evaluation
+    - Systematic Red Teaming
+    - Automated Filters & Human Review
+    - Adherence to Guidelines
+
+- performance metrics tell us if the agent can do the job, but safety evaluation tells
+us if it should.
