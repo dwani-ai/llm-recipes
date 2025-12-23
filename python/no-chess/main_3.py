@@ -8,7 +8,7 @@ import chess
 import chess.engine
 
 def get_openai_client(model: str) -> OpenAI:
-    valid_models = ["gemma3", "gpt-oss"]
+    valid_models = ["gemma3"]
     if model not in valid_models:
         raise ValueError(f"Invalid model: {model}")
 
@@ -19,26 +19,23 @@ def get_openai_client(model: str) -> OpenAI:
     return OpenAI(api_key="http", base_url=base_url)
 
 # Configuration
-os.environ['SDL_VIDEO_WINDOW_POS'] = "100,100"  # Fixed window position
-OPENAI_API_KEY = "your-openai-api-key-here"
-STOCKFISH_PATH = "/usr/games/stockfish"  # Default Ubuntu path after 'sudo apt install stockfish'
-MODE = 1  # 1: Only current knowledge (parse screenshot each turn, defaults for FEN extras)
-         # 2: Previous moves (track full game state internally)
-THINK_TIME_OUR = 1.0  # Not used anymore for our moves, but kept for compatibility
-THINK_TIME_OPP = 2.0  # Seconds for opponent (perfect play)
+os.environ['SDL_VIDEO_WINDOW_POS'] = "100,100"
+STOCKFISH_PATH = "/usr/games/stockfish"
+MODE = 1  # 1: Vision-only each turn | 2: Track full game state
+THINK_TIME_OPP = 2.0
 BOARD_SIZE = 800
 SQUARE_SIZE = BOARD_SIZE // 8
 DEBUG_DIR = "debug_images"
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
-# Initialize
+# Initialize Pygame
 pygame.init()
 screen = pygame.display.set_mode((BOARD_SIZE, BOARD_SIZE))
 pygame.display.set_caption("Local Chess: Vision Bot (White) vs Stockfish (Black)")
 clock = pygame.time.Clock()
-font = pygame.font.SysFont("dejavusans", int(SQUARE_SIZE * 0.8))  # Use system font with Unicode chess support
+font = pygame.font.SysFont("dejavusans", int(SQUARE_SIZE * 0.8))
 
-# Unicode pieces (white uppercase-style, black lowercase-style)
+# Unicode pieces
 PIECES = {
     chess.PAWN:    {chess.WHITE: '♙', chess.BLACK: '♟'},
     chess.KNIGHT:  {chess.WHITE: '♘', chess.BLACK: '♞'},
@@ -51,25 +48,19 @@ PIECES = {
 # Colors
 LIGHT_SQUARE = (240, 217, 181)
 DARK_SQUARE = (181, 136, 99)
-WHITE_PIECE_COLOR = (0, 0, 0)  # Black for white pieces (high contrast)
-BLACK_PIECE_COLOR = (0, 0, 0)  # Black for black pieces
+PIECE_COLOR = (0, 0, 0)  # Black text for all pieces
 
-# OpenAI
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Stockfish engine (shared, only for opponent)
+# Stockfish
 engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
-engine.configure({"Threads": 4, "Hash": 2048})  # Optional: tune for your machine
+engine.configure({"Threads": 4, "Hash": 2048})
 
 def draw_board(screen, board):
-    # Draw squares
     for row in range(8):
         for col in range(8):
             color = LIGHT_SQUARE if (row + col) % 2 == 0 else DARK_SQUARE
             rect = pygame.Rect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
             pygame.draw.rect(screen, color, rect)
     
-    # Draw pieces (white at bottom: row 0 = rank 8, row 7 = rank 1)
     for row in range(8):
         chess_rank = 7 - row
         for col in range(8):
@@ -77,26 +68,37 @@ def draw_board(screen, board):
             piece = board.piece_at(square)
             if piece:
                 sym = PIECES[piece.piece_type][piece.color]
-                piece_color = WHITE_PIECE_COLOR if piece.color == chess.WHITE else BLACK_PIECE_COLOR
-                text_surf = font.render(sym, True, piece_color)
-                text_rect = text_surf.get_rect(center=(col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                                                      row * SQUARE_SIZE + SQUARE_SIZE // 2))
+                text_surf = font.render(sym, True, PIECE_COLOR)
+                text_rect = text_surf.get_rect(center=(
+                    col * SQUARE_SIZE + SQUARE_SIZE // 2,
+                    row * SQUARE_SIZE + SQUARE_SIZE // 2
+                ))
                 screen.blit(text_surf, text_rect)
     
     pygame.display.flip()
 
 def get_board_screenshot_b64(screen):
-    """Capture exact board PNG from Pygame surface (no window borders)"""
     img_buffer = io.BytesIO()
     pygame.image.save(screen, img_buffer, "PNG")
     img_buffer.seek(0)
     return base64.b64encode(img_buffer.read()).decode("utf-8")
 
 def get_placement_from_screenshot(b64_image, turn_number):
-    """Parse piece placement from board screenshot using OpenAI Vision"""
-
-    model_name = "gemma3"  # Switched to "gpt-oss" as "gemma3" appears to ignore images; revert if needed
+    """Improved prompt for Qwen3-VL-8B (gemma3)"""
+    model_name = "gemma3"  # This is your Qwen3-VL-8B vision model
     client = get_openai_client(model_name)
+
+    vision_prompt = """Analyze this chessboard image carefully. The board is oriented with White at the bottom (rank 1 at bottom, rank 8 at top) and Black at the top. Identify every piece on each square, row by row from top (rank 8) to bottom (rank 1).
+
+Use standard FEN notation for piece placement:
+- Uppercase for White: P (pawn), N (knight), B (bishop), R (rook), Q (queen), K (king)
+- Lowercase for Black: p, n, b, r, q, k
+- Numbers (1-8) for consecutive empty squares
+- Rows separated by /
+
+Examine the image closely: look at the Unicode symbols (♔♕♖♗♘♙ for White, ♚♛♜♝♞♟ for Black), their exact positions, and any moved or captured pieces. Do not assume the starting position — detect the current layout accurately.
+
+Output ONLY the piece placement part (8 rows separated by /). No explanations, no full FEN, no quotes, no extra text."""
 
     response = client.chat.completions.create(
         model=model_name,
@@ -104,171 +106,128 @@ def get_placement_from_screenshot(b64_image, turn_number):
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "text",
-                        "text": """You are an expert at parsing chessboard screenshots into FEN piece placements. The board has white pieces at the bottom (ranks 1-2 initially), black at the top (ranks 7-8). Use these rules:
-- Uppercase for White: P=pawn, N=knight, B=bishop, R=rook, Q=queen, K=king.
-- Lowercase for Black: p=pawn, n=knight, b=bishop, r=rook, q=queen, k=king.
-- Numbers for consecutive empty squares per row (e.g., 8 for empty row).
-- Output ONLY the 8-row placement string separated by /, no extra text or explanations.
-
-Examples:
-1. Starting position: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR
-2. After white e4, black c5 (Sicilian): rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR
-3. After white e4, black e6 (French): rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR
-4. Midgame with capture: rnb1kbnr/ppqQ3p/PqpPpPPp/1PPp1p2/3p4/5NPP/PPP4P/RNBq3K (detect moved pieces, empties, and captures accurately).
-
-Now, analyze this screenshot and output ONLY the placement."""
-                    },
+                    {"type": "text", "text": vision_prompt},
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_image}"}}
                 ]
             }
         ],
         max_tokens=100,
-        temperature=0.0  # More deterministic
+        temperature=0.0
     )
-    # Logging the vision model output
+
     print(f"\n--- Vision Model Logging (Turn {turn_number}) ---")
-    print("Full response object:", response)
-    content = response.choices[0].message.content
-    print("Raw content:", repr(content))  # Use repr to show newlines/escapes
-    print("--- End Vision Model Logging ---\n")
-    
-    placement = content.strip()
-    if '/' not in placement or len(placement.split('/')) != 8:
-        raise ValueError("Invalid placement parsed")
-    return placement
+    content = response.choices[0].message.content.strip()
+    print("Raw output:", repr(content))
+    print("--- End Logging ---\n")
+
+    if '/' not in content or len(content.split('/')) != 8:
+        raise ValueError(f"Invalid placement format: {content}")
+
+    return content
 
 def get_move_from_openai(current_board):
-    """Get the next move for White from OpenAI."""
-    model_name = "gemma3"  # Use the same as vision or change to "gemma3" if preferred for text
+    """Get move from text model — prefer gemma3 if it's better at chess"""
+    model_name = "gemma3"  # Change to "gemma3" if gemma3 is unavailable or weaker
     client = get_openai_client(model_name)
     
     fen = current_board.fen()
-    prompt = f"You are a chess grandmaster. Given this FEN: {fen} (White to move), suggest the best move in UCI format (e.g., e2e4). Output ONLY the move, no extra text."
-    
-    for attempt in range(3):  # Retry up to 3 times if invalid
+    prompt = f"""You are a strong chess player. The current position is:
+
+{fen}
+
+White to move. Think carefully and output ONLY the best move in UCI format (e.g., e7e8q for promotion with queen). No explanation, no extra text."""
+
+    for attempt in range(5):  # Increased retries
         response = client.chat.completions.create(
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=10,
-            temperature=0.0
+            temperature=0.2  # Slight temperature for better exploration
         )
         move_str = response.choices[0].message.content.strip()
-        print(f"OpenAI suggested move: {move_str}")
-        
+        print(f"OpenAI suggested: {move_str}")
+
         try:
             move = chess.Move.from_uci(move_str)
             if move in current_board.legal_moves:
                 return move
             else:
-                print(f"Invalid move {move_str} (not legal), retrying...")
+                print(f"Illegal move {move_str}, retrying...")
         except ValueError:
-            print(f"Invalid UCI format {move_str}, retrying...")
-    
-    raise ValueError("Failed to get a valid move from OpenAI after retries.")
+            print(f"Invalid UCI format: {move_str}, retrying...")
 
-# Game setup: We (White, vision-bot with OpenAI moves) vs Opponent (Black, perfect Stockfish)
+    raise ValueError("Failed to get valid move after multiple attempts.")
+
+# Game loop
 game_board = chess.Board()
-our_turn = True  # White to move first
-turn_counter = 1  # To track turns for logging/images
+our_turn = True
+turn_counter = 1
 
 print("Starting game: Vision Bot (White) vs Stockfish (Black)")
-print("Mode:", "Current knowledge only" if MODE == 1 else "Full history")
-print("Press Ctrl+C or close window to stop.")
+print("Mode:", "Vision-only per turn" if MODE == 1 else "Full history tracking")
 
 try:
     while not game_board.is_game_over():
-        # Handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise KeyboardInterrupt
 
-        # Draw current board
         draw_board(screen, game_board)
-        time.sleep(0.5)  # Increased wait time to ensure display is fully updated before screenshot
+        time.sleep(0.6)  # Ensure render is complete
 
         if our_turn:
-            # Our turn (always White)
-            print("\nOur turn (White)...")
+            print(f"\nTurn {turn_counter} - Our move (White)")
             b64_image = get_board_screenshot_b64(screen)
-            # Save screenshot for debugging
-            image_path = os.path.join(DEBUG_DIR, f"turn_{turn_counter}_white.png")
-            with open(image_path, 'wb') as f:
+            debug_path = os.path.join(DEBUG_DIR, f"turn_{turn_counter}_white.png")
+            with open(debug_path, 'wb') as f:
                 f.write(base64.b64decode(b64_image))
-            print(f"Saved screenshot to: {image_path}")
-            
+            print(f"Screenshot saved: {debug_path}")
+
             placement = get_placement_from_screenshot(b64_image, turn_counter)
             print("Parsed placement:", placement)
-            print("Actual placement:", game_board.board_fen())  # For comparison
+            print("Actual placement :", game_board.board_fen())
 
-            # Validation: Check for mismatch and retry/fallback
-            use_internal = False
-            expected_placement = game_board.board_fen()
-            if placement != expected_placement:
-                print(f"Vision parse mismatch on turn {turn_counter}! Expected: {expected_placement}, Parsed: {placement}")
-                # Retry vision once
-                print("Retrying vision parse...")
+            expected = game_board.board_fen()
+            if placement != expected:
+                print("Vision mismatch! Retrying once...")
                 placement = get_placement_from_screenshot(b64_image, turn_counter)
-                if placement != expected_placement:
-                    print("Retry failed. Falling back to internal board state.")
-                    use_internal = True
+                if placement != expected:
+                    print("Retry failed — falling back to internal state.")
+                    current_board = game_board
                 else:
                     print("Retry successful.")
-            else:
-                print("Vision parse matches.")
-
-            # Now set current_board based on validation
-            if MODE == 1 and not use_internal:
-                fen = f"{placement} w KQkq - 0 1"
-                print("Mode 1 FEN:", fen)
-                try:
+                    fen = f"{placement} {'w' if our_turn else 'b'} KQkq - 0 1"
                     current_board = chess.Board(fen)
-                    # Validate basic position (e.g., kings present)
-                    if current_board.king(chess.WHITE) is None or current_board.king(chess.BLACK) is None:
-                        raise ValueError("Invalid chess position: Missing king(s)")
-                except ValueError as e:
-                    print(f"Error creating board: {e}")
-                    print("Falling back to full board state.")
-                    current_board = game_board
-                    use_internal = True
             else:
-                current_board = game_board
+                print("Vision parse correct.")
                 if MODE == 1:
-                    print("Using internal state for this turn (fallback).")
+                    fen = f"{placement} w KQkq - 0 1"
+                    current_board = chess.Board(fen)
                 else:
-                    print("Mode 2: Using full board state")
+                    current_board = game_board
 
-            # Compute and play move using OpenAI
-            print("Thinking with OpenAI...")
+            print("Thinking about move...")
             move = get_move_from_openai(current_board)
-            print("Our move:", move)
+            print(f"Playing: {move.uci()}")
             game_board.push(move)
-            print("Board after our move:\n", game_board)
-            
             turn_counter += 1
 
         else:
-            # Opponent turn (Black, perfect)
-            print("\nOpponent turn (Black)...")
-            print("Thinking...")
+            print("\nStockfish (Black) thinking...")
             result = engine.play(game_board, chess.engine.Limit(time=THINK_TIME_OPP))
             move = result.move
-            print("Opponent move:", move)
+            print(f"Stockfish plays: {move.uci()}")
             game_board.push(move)
-            print("Board after opponent move:\n", game_board)
 
         our_turn = not our_turn
-        clock.tick(30)  # Limit FPS
+        clock.tick(30)
 
-    # Game over
     print("\nGame Over!")
-    print(game_board.result())
+    print("Result:", game_board.result())
     print("Final FEN:", game_board.fen())
 
 except KeyboardInterrupt:
-    print("\nStopped by user.")
-
+    print("\nGame stopped by user.")
 finally:
     engine.quit()
     pygame.quit()
