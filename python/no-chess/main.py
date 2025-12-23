@@ -6,8 +6,6 @@ import pygame
 from openai import OpenAI
 import chess
 import chess.engine
-from openai import AsyncOpenAI, OpenAI
-
 
 
 def get_openai_client(model: str) -> OpenAI:
@@ -20,18 +18,6 @@ def get_openai_client(model: str) -> OpenAI:
         raise RuntimeError("DWANI_API_BASE_URL environment variable is not set")
 
     return OpenAI(api_key="http", base_url=base_url)
-
-def get_async_openai_client(model: str) -> AsyncOpenAI:
-    valid_models = ["gemma3", "gpt-oss"]
-    if model not in valid_models:
-        raise ValueError(f"Invalid model: {model}")
-
-    base_url = os.getenv("DWANI_API_BASE_URL")
-    if not base_url:
-        raise RuntimeError("DWANI_API_BASE_URL environment variable is not set")
-
-    return AsyncOpenAI(api_key="http", base_url=base_url)
-
 
 # Configuration
 os.environ['SDL_VIDEO_WINDOW_POS'] = "100,100"  # Fixed window position
@@ -49,7 +35,7 @@ pygame.init()
 screen = pygame.display.set_mode((BOARD_SIZE, BOARD_SIZE))
 pygame.display.set_caption("Local Chess: Vision Bot (White) vs Stockfish (Black)")
 clock = pygame.time.Clock()
-font = pygame.font.Font(None, int(SQUARE_SIZE * 0.8))  # Large Unicode font
+font = pygame.font.SysFont("dejavusans", int(SQUARE_SIZE * 0.8))  # Use system font with Unicode chess support
 
 # Unicode pieces (white uppercase-style, black lowercase-style)
 PIECES = {
@@ -64,7 +50,8 @@ PIECES = {
 # Colors
 LIGHT_SQUARE = (240, 217, 181)
 DARK_SQUARE = (181, 136, 99)
-PIECE_COLOR = (30, 30, 30)  # Dark for all pieces
+WHITE_PIECE_COLOR = (30, 30, 30)  # Dark for visibility
+BLACK_PIECE_COLOR = (30, 30, 30)  # Same for now
 
 # OpenAI
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -89,7 +76,8 @@ def draw_board(screen, board):
             piece = board.piece_at(square)
             if piece:
                 sym = PIECES[piece.piece_type][piece.color]
-                text_surf = font.render(sym, True, PIECE_COLOR)
+                piece_color = WHITE_PIECE_COLOR if piece.color == chess.WHITE else BLACK_PIECE_COLOR
+                text_surf = font.render(sym, True, piece_color)
                 text_rect = text_surf.get_rect(center=(col * SQUARE_SIZE + SQUARE_SIZE // 2,
                                                       row * SQUARE_SIZE + SQUARE_SIZE // 2))
                 screen.blit(text_surf, text_rect)
@@ -111,7 +99,7 @@ def get_placement_from_screenshot(b64_image):
 
     response = client.chat.completions.create(
         model=model_name,
-        messages=[
+            messages=[
             {
                 "role": "user",
                 "content": [
