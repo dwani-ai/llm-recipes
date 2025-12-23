@@ -29,6 +29,8 @@ THINK_TIME_OUR = 1.0  # Seconds for our engine
 THINK_TIME_OPP = 2.0  # Seconds for opponent (perfect play)
 BOARD_SIZE = 800
 SQUARE_SIZE = BOARD_SIZE // 8
+DEBUG_DIR = "debug_images"
+os.makedirs(DEBUG_DIR, exist_ok=True)
 
 # Initialize
 pygame.init()
@@ -50,8 +52,8 @@ PIECES = {
 # Colors
 LIGHT_SQUARE = (240, 217, 181)
 DARK_SQUARE = (181, 136, 99)
-WHITE_PIECE_COLOR = (30, 30, 30)  # Dark for visibility
-BLACK_PIECE_COLOR = (30, 30, 30)  # Same for now
+WHITE_PIECE_COLOR = (0, 0, 0)  # Black for white pieces (high contrast)
+BLACK_PIECE_COLOR = (0, 0, 0)  # Black for black pieces
 
 # OpenAI
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -91,30 +93,36 @@ def get_board_screenshot_b64(screen):
     img_buffer.seek(0)
     return base64.b64encode(img_buffer.read()).decode("utf-8")
 
-def get_placement_from_screenshot(b64_image):
+def get_placement_from_screenshot(b64_image, turn_number):
     """Parse piece placement from board screenshot using OpenAI Vision"""
 
-    model_name="gemma3"
+    model_name="gemma3"  # Using gemma3 as specified
     client = get_openai_client(model_name)
 
     response = client.chat.completions.create(
         model=model_name,
             messages=[
             {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "This is a screenshot of a chessboard (white pieces at bottom). Output ONLY the piece placement part of FEN: 8 rows separated by / (e.g., rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR). Uppercase=White, lowercase=Black, numbers=empty squares. No extra text."
-                    },
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_image}"}}
-                ]
+                "role": "user","content": [
+    {
+        "type": "text",
+        "text": "Analyze this chessboard screenshot (white pieces at bottom, black at top). Detect all pieces accurately: Uppercase for White (P=pawn, N=knight, B=bishop, R=rook, Q=queen, K=king), lowercase for Black. Use numbers for consecutive empty squares. Output ONLY the 8-row piece placement part of FEN, separated by / (e.g., rnbqkbnr/pppppppp/8/8/4P3/8/PPPPPPPP/RNBQKBNR if a pawn has moved). No explanations or extra text."
+    },
+    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_image}"}}
+]
             }
         ],
         max_tokens=100,
         temperature=0.1
     )
-    placement = response.choices[0].message.content.strip()
+    # Logging the vision model output
+    print(f"\n--- Vision Model Logging (Turn {turn_number}) ---")
+    print("Full response object:", response)
+    content = response.choices[0].message.content
+    print("Raw content:", repr(content))  # Use repr to show newlines/escapes
+    print("--- End Vision Model Logging ---\n")
+    
+    placement = content.strip()
     if '/' not in placement or len(placement.split('/')) != 8:
         raise ValueError("Invalid placement parsed")
     return placement
@@ -122,6 +130,7 @@ def get_placement_from_screenshot(b64_image):
 # Game setup: We (White, vision-bot) vs Opponent (Black, perfect Stockfish)
 game_board = chess.Board()
 our_turn = True  # White to move first
+turn_counter = 1  # To track turns for logging/images
 
 print("Starting game: Vision Bot (White) vs Stockfish (Black)")
 print("Mode:", "Current knowledge only" if MODE == 1 else "Full history")
@@ -136,19 +145,34 @@ try:
 
         # Draw current board
         draw_board(screen, game_board)
+        time.sleep(0.2)  # Add wait time to ensure display is fully updated before screenshot
 
         if our_turn:
             # Our turn (always White)
             print("\nOur turn (White)...")
             b64_image = get_board_screenshot_b64(screen)
-            placement = get_placement_from_screenshot(b64_image)
+            # Save screenshot for debugging
+            image_path = os.path.join(DEBUG_DIR, f"turn_{turn_counter}_white.png")
+            with open(image_path, 'wb') as f:
+                f.write(base64.b64decode(b64_image))
+            print(f"Saved screenshot to: {image_path}")
+            
+            placement = get_placement_from_screenshot(b64_image, turn_counter)
             print("Parsed placement:", placement)
 
             if MODE == 1:
                 # Mode 1: Current knowledge only - defaults for castling/en passant/etc.
                 fen = f"{placement} w KQkq - 0 1"
-                current_board = chess.Board(fen)
                 print("Mode 1 FEN:", fen)
+                try:
+                    current_board = chess.Board(fen)
+                    # Validate basic position (e.g., kings present)
+                    if current_board.king(chess.WHITE) is None or current_board.king(chess.BLACK) is None:
+                        raise ValueError("Invalid chess position: Missing king(s)")
+                except ValueError as e:
+                    print(f"Error creating board: {e}")
+                    print("Falling back to full board state for this turn.")
+                    current_board = game_board
             else:
                 # Mode 2: Full history
                 current_board = game_board
@@ -161,6 +185,8 @@ try:
             print("Our move:", move)
             game_board.push(move)
             print("Board after our move:\n", game_board)
+            
+            turn_counter += 1
 
         else:
             # Opponent turn (Black, perfect)
