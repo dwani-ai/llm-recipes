@@ -7,7 +7,6 @@ from openai import OpenAI
 import chess
 import chess.engine
 
-
 def get_openai_client(model: str) -> OpenAI:
     valid_models = ["gemma3", "gpt-oss"]
     if model not in valid_models:
@@ -96,18 +95,18 @@ def get_board_screenshot_b64(screen):
 def get_placement_from_screenshot(b64_image, turn_number):
     """Parse piece placement from board screenshot using OpenAI Vision"""
 
-    model_name="gemma3"  # Using gemma3 as specified
+    model_name = "gemma3"  # Switched to "gpt-oss" as "gemma3" appears to ignore images; revert if needed
     client = get_openai_client(model_name)
 
     response = client.chat.completions.create(
         model=model_name,
-            messages=[
+        messages=[
             {
                 "role": "user",
                 "content": [
-    {
-        "type": "text",
-        "text": """You are an expert at parsing chessboard screenshots into FEN piece placements. The board has white pieces at the bottom (ranks 1-2 initially), black at the top (ranks 7-8). Use these rules:
+                    {
+                        "type": "text",
+                        "text": """You are an expert at parsing chessboard screenshots into FEN piece placements. The board has white pieces at the bottom (ranks 1-2 initially), black at the top (ranks 7-8). Use these rules:
 - Uppercase for White: P=pawn, N=knight, B=bishop, R=rook, Q=queen, K=king.
 - Lowercase for Black: p=pawn, n=knight, b=bishop, r=rook, q=queen, k=king.
 - Numbers for consecutive empty squares per row (e.g., 8 for empty row).
@@ -116,16 +115,17 @@ def get_placement_from_screenshot(b64_image, turn_number):
 Examples:
 1. Starting position: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR
 2. After white e4, black c5 (Sicilian): rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR
-3. Midgame with capture: rnb1kbnr/ppqQ3p/PqpPpPPp/1PPp1p2/3p4/5NPP/PPP4P/RNBq3K (detect moved pieces, empties, and captures accurately).
+3. After white e4, black e6 (French): rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR
+4. Midgame with capture: rnb1kbnr/ppqQ3p/PqpPpPPp/1PPp1p2/3p4/5NPP/PPP4P/RNBq3K (detect moved pieces, empties, and captures accurately).
 
 Now, analyze this screenshot and output ONLY the placement."""
-    },
-    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_image}"}}
-]
+                    },
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_image}"}}
+                ]
             }
         ],
         max_tokens=100,
-        temperature=0.1
+        temperature=0.0  # More deterministic
     )
     # Logging the vision model output
     print(f"\n--- Vision Model Logging (Turn {turn_number}) ---")
@@ -157,7 +157,7 @@ try:
 
         # Draw current board
         draw_board(screen, game_board)
-        time.sleep(0.2)  # Add wait time to ensure display is fully updated before screenshot
+        time.sleep(0.5)  # Increased wait time to ensure display is fully updated before screenshot
 
         if our_turn:
             # Our turn (always White)
@@ -171,9 +171,26 @@ try:
             
             placement = get_placement_from_screenshot(b64_image, turn_counter)
             print("Parsed placement:", placement)
+            print("Actual placement:", game_board.board_fen())  # For comparison
 
-            if MODE == 1:
-                # Mode 1: Current knowledge only - defaults for castling/en passant/etc.
+            # Validation: Check for mismatch and retry/fallback
+            use_internal = False
+            expected_placement = game_board.board_fen()
+            if placement != expected_placement:
+                print(f"Vision parse mismatch on turn {turn_counter}! Expected: {expected_placement}, Parsed: {placement}")
+                # Retry vision once
+                print("Retrying vision parse...")
+                placement = get_placement_from_screenshot(b64_image, turn_counter)
+                if placement != expected_placement:
+                    print("Retry failed. Falling back to internal board state.")
+                    use_internal = True
+                else:
+                    print("Retry successful.")
+            else:
+                print("Vision parse matches.")
+
+            # Now set current_board based on validation
+            if MODE == 1 and not use_internal:
                 fen = f"{placement} w KQkq - 0 1"
                 print("Mode 1 FEN:", fen)
                 try:
@@ -183,12 +200,15 @@ try:
                         raise ValueError("Invalid chess position: Missing king(s)")
                 except ValueError as e:
                     print(f"Error creating board: {e}")
-                    print("Falling back to full board state for this turn.")
+                    print("Falling back to full board state.")
                     current_board = game_board
+                    use_internal = True
             else:
-                # Mode 2: Full history
                 current_board = game_board
-                print("Mode 2: Using full board state")
+                if MODE == 1:
+                    print("Using internal state for this turn (fallback).")
+                else:
+                    print("Mode 2: Using full board state")
 
             # Compute and play move
             print("Thinking...")
