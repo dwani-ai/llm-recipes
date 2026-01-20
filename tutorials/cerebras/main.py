@@ -12,6 +12,9 @@ client = Cerebras(
 # Initialize the chat history
 chat_history = []
 
+model_name="llama3.1-8b"
+model_name = "zai-glm-4.7"
+
 while True:
     # Get user input from the console
     user_input = input("User: ")
@@ -22,7 +25,7 @@ while True:
 
     response = client.chat.completions.create(
     messages=[user_message],
-    model="llama3.1-8b",
+    model=model_name,
 )
     # Append the user's response to the chat history
     chat_history.append({
