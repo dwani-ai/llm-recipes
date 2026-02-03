@@ -2,8 +2,8 @@ services:
   vllm:
     image: vllm/vllm-openai:latest
     command: [
-      "--model", "Qwen/Qwen3-Coder-Next",
-      "--served-model-name", "qwen3-coder-next",
+      "--model", "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "--served-model-name", "qwen3-coder",
       "--host", "0.0.0.0",
       "--port", "8000",
       "--gpu-memory-utilization", "0.9",
