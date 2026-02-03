@@ -1,7 +1,22 @@
 Qwen 3 Coder
 
+- Model Name  : qwen3-coder 
+- GPU : A100 with 80GB
 
-A100 with 80GB
 
-vllm serve Qwen/Qwen3-Coder-Next --port 8000 --tensor-parallel-size 2 --enable-auto-tool-choice --tool-call-parser qwen3_coder
+- pip install -r requirements.txt
 
+curl -X POST "https://YOUR_BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-coder",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Say hello"
+      }
+    ],
+    "max_tokens": 128,
+    "temperature": 0.2
+  }'
