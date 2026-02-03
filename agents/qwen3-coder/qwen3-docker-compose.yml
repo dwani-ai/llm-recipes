@@ -17,7 +17,6 @@ services:
       "--enable-auto-tool-choice",
       "--tool-call-parser", "qwen3_coder",
       "--enforce-eager",
-      "--max-seq-len-to-capture", "131072", 
       "--swap-space", "16"
     ]
     deploy:
