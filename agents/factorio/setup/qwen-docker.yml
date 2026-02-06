@@ -16,8 +16,6 @@ services:
               capabilities: [gpu]
     networks:
       - app-network
-    restart: unless-stopped
-
     command: >
       --host 0.0.0.0
       --port 8080
