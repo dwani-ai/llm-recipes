@@ -4,7 +4,11 @@ Qwen 3 Coder
 - GPU : A100 with 80GB
 
 
+export QWEN_API_BASE="qwen-url"
+
 - pip install -r requirements.txt
+
+- python main.py
 
 curl -X POST "https://YOUR_BASE_URL/v1/chat/completions" \
   -H "Authorization: Bearer YOUR_API_KEY" \
@@ -20,3 +24,8 @@ curl -X POST "https://YOUR_BASE_URL/v1/chat/completions" \
     "max_tokens": 128,
     "temperature": 0.2
   }'
+
+
+--
+
+Use llama-cpp with L4 : 
