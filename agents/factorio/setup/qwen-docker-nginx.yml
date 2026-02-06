@@ -4,7 +4,7 @@ services:
     container_name: qwen3-coder
     restart: unless-stopped
     ports:
-      - "80:8080"
+      - "8080:8080"
     volumes:
       - ./models:/models
     deploy:
@@ -30,6 +30,18 @@ services:
       --top-k 20
       --jinja
       --alias qwen3-coder
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - qwen3-coder
+    networks:
+      - app-network
+    restart: unless-stopped
+
 networks:
   app-network:
     driver: bridge
