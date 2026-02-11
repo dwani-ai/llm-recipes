@@ -1,0 +1,35 @@
+services:
+  qwen3-coder:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: qwen3-coder
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+    volumes:
+      - ./models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+    command: >
+      --host 0.0.0.0
+      --port 8080
+      --model /models/Qwen3-Coder-30B-A3B-Instruct-IQ4_XS.gguf
+      --ctx-size 32768
+      --n-gpu-layers 99
+      --main-gpu 0
+      --batch-size 1024
+      --ubatch-size 256
+      --temp 0.6
+      --top-p 0.8
+      --top-k 20
+      --jinja
+      --alias qwen3-coder
+networks:
+  app-network:
+    driver: bridge

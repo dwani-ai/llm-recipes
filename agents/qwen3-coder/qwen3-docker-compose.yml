@@ -1,0 +1,47 @@
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    command: [
+      "--model", "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "--served-model-name", "qwen3-coder",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--gpu-memory-utilization", "0.9",
+      "--tensor-parallel-size", "1",
+      "--max-model-len", "131072",
+      "--disable-log-requests",
+      "--dtype", "auto",
+      "--enable-chunked-prefill",
+      "--enable-prefix-caching",
+      "--max-num-batched-tokens", "8192",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "qwen3_coder",
+      "--enforce-eager",
+      "--swap-space", "16"
+    ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - vllm
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
