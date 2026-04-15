@@ -52,6 +52,15 @@ export type BenchmarkResponse = {
   artifacts: Record<string, string>;
 };
 
+export type RunHistoryItem = {
+  saved_at: string;
+  run_id: string;
+  best_scenario_id: string | null;
+  summaries_count: number;
+  request: Record<string, unknown>;
+  artifacts: Record<string, string>;
+};
+
 export type DefaultModesResponse = {
   defaults: {
     stack: string;
@@ -62,5 +71,9 @@ export type DefaultModesResponse = {
     explicit_cache: boolean;
     trials: number;
   };
+};
+
+export type RunHistoryResponse = {
+  runs: RunHistoryItem[];
 };
 

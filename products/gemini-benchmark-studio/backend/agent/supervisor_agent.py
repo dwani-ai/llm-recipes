@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 from typing import Dict, List
 
+from agent.adk_runtime import ADKRuntime
 from agent.analyzer_agent import AnalyzerAgent
 from agent.benchmark_worker_agent import BenchmarkWorkerAgent
 from agent.optimizer_agent import OptimizerAgent
 from agent.planner_agent import PlannerAgent
 from agent.reporter_agent import ReporterAgent
+from agent.tool_worker_agent import ToolWorkerAgent
 from app.schemas import BenchmarkRecommendation, BenchmarkRequest, BenchmarkResponse, ScenarioSummary
 from app.services.benchmark_runner import BenchmarkRunner
 from app.services.prompt_template import render_prompt_template
@@ -19,12 +21,32 @@ class SupervisorResult:
 
 class SupervisorAgent:
     def __init__(self) -> None:
+        self.runtime = ADKRuntime()
         self.runner = BenchmarkRunner()
         self.planner = PlannerAgent(self.runner)
         self.worker = BenchmarkWorkerAgent(self.runner)
         self.analyzer = AnalyzerAgent()
         self.optimizer = OptimizerAgent()
         self.reporter = ReporterAgent()
+        self.tool_worker = ToolWorkerAgent(self.runtime)
+        self._register_tools()
+
+    def _register_tools(self) -> None:
+        self.runtime.register_tool(
+            "count_successful_scenarios",
+            lambda summaries: len([item for item in summaries if item.get("ok_count", 0) > 0]),
+        )
+        self.runtime.register_tool(
+            "estimate_reliability_score",
+            lambda summaries: (
+                0.0
+                if not summaries
+                else round(
+                    len([item for item in summaries if item.get("error_count", 0) == 0]) / len(summaries),
+                    3,
+                )
+            ),
+        )
 
     def run(self, request: BenchmarkRequest) -> SupervisorResult:
         trace: List[str] = ["SupervisorAgent: starting workflow."]
@@ -41,6 +63,23 @@ class SupervisorAgent:
         trace.extend(worker_output.trace)
 
         summaries_raw = worker_output.run_payload["summaries"]
+        tool_output = self.tool_worker.run(
+            [
+                {
+                    "tool": "count_successful_scenarios",
+                    "kwargs": {"summaries": summaries_raw},
+                    "output_key": "success_count",
+                },
+                {
+                    "tool": "estimate_reliability_score",
+                    "kwargs": {"summaries": summaries_raw},
+                    "output_key": "reliability_score",
+                },
+            ]
+        )
+        trace.extend(tool_output.trace)
+        trace.append(f"SupervisorAgent: tool outputs={tool_output.outputs}.")
+
         analyzer = self.analyzer.analyze(summaries_raw)
         trace.extend(analyzer.trace)
 

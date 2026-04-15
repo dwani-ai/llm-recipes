@@ -21,6 +21,13 @@ class PromptPreviewResponse(BaseModel):
     rendered_prompt: str
     missing_variables: List[str]
 
+class UploadContextResponse(BaseModel):
+    variable_key: str
+    bytes_received: int
+    chars_extracted: int
+    context_text: str
+    preview: str
+
 
 class BenchmarkRequest(BaseModel):
     api_key: str = Field(min_length=10)
@@ -73,4 +80,17 @@ class BenchmarkResponse(BaseModel):
 
 class DefaultModesResponse(BaseModel):
     defaults: Dict[str, Any] = Field(default_factory=best_mode_defaults)
+
+
+class RunHistoryItem(BaseModel):
+    saved_at: str
+    run_id: str
+    best_scenario_id: Optional[str] = None
+    summaries_count: int
+    request: Dict[str, Any]
+    artifacts: Dict[str, str]
+
+
+class RunHistoryResponse(BaseModel):
+    runs: List[RunHistoryItem]
 

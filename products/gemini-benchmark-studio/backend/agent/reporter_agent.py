@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from agent.adk_runtime import ADKRuntime
+
 
 @dataclass
 class ReporterOutput:
@@ -10,17 +12,7 @@ class ReporterOutput:
 
 class ReporterAgent:
     def __init__(self) -> None:
-        self._adk_available = False
-        self._adk_error: Optional[str] = None
-        self._initialize_adk()
-
-    def _initialize_adk(self) -> None:
-        try:
-            __import__("google.adk")
-            self._adk_available = True
-        except Exception as exc:  # pragma: no cover
-            self._adk_available = False
-            self._adk_error = f"ADK unavailable ({type(exc).__name__})"
+        self.adk_runtime = ADKRuntime()
 
     def _fallback_rationale(self, best_row: Optional[Dict[str, object]]) -> str:
         if best_row is None:
@@ -34,13 +26,19 @@ class ReporterAgent:
         )
 
     def report(self, best_row: Optional[Dict[str, object]], summaries: List[Dict[str, object]]) -> ReporterOutput:
-        if not self._adk_available:
+        adk_prompt = (
+            "Summarize benchmark recommendation with emphasis on TTFT and reliability. "
+            f"Best row: {best_row}. Total summaries: {len(summaries)}"
+        )
+        adk_summary = self.adk_runtime.summarize(adk_prompt)
+        if not self.adk_runtime.available or adk_summary is None:
             rationale = self._fallback_rationale(best_row)
-            trace = [f"ReporterAgent: {self._adk_error or 'ADK unavailable'}; used fallback rationale."]
+            trace = [
+                "ReporterAgent: ADK summary unavailable; used deterministic fallback rationale."
+            ]
             return ReporterOutput(rationale=rationale, trace=trace)
 
-        # In this implementation, ADK runtime is optional; fallback remains stable.
-        rationale = self._fallback_rationale(best_row)
-        trace = ["ReporterAgent: ADK module detected; using conservative local rationale formatter."]
+        rationale = adk_summary
+        trace = ["ReporterAgent: ADK runtime generated rationale."]
         return ReporterOutput(rationale=rationale, trace=trace)
 
