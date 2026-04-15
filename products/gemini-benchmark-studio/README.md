@@ -14,6 +14,7 @@ Standalone product for benchmarking Gemini response modes with:
 
 - API key input from UI for each run (not persisted)
 - Checkbox mode selection
+- Stack selection: `google_genai`, `openai_compat`, `vertex_api`
 - Best known mode defaults preselected:
   - stack: `google_genai`
   - model: `gemini-2.5-flash`
@@ -22,6 +23,7 @@ Standalone product for benchmarking Gemini response modes with:
   - cache: `implicit_reuse`
 - Prompt template + variable editor and preview
 - Data file upload into `data_context` prompt variable
+- Vertex API credentials form (project, location, endpoint, optional access token)
 - Benchmark run artifacts and recommendation report
 - Run history endpoint and UI table for recent runs
 
@@ -58,6 +60,13 @@ The frontend expects backend at `http://localhost:8000`.
 - `POST /api/prompt/upload-context`
 - `POST /api/benchmark/run`
 - `GET /api/benchmark/history`
+
+For `vertex_api`, send `vertex_config` with:
+
+- `project_id`
+- `location` (e.g. `us-central1`)
+- `endpoint_id` (use `openapi` for Gemini OpenAPI endpoint on Vertex)
+- `access_token` (optional; if omitted, backend uses ADC via `google-auth`)
 
 ## Run with Docker Compose
 

@@ -7,3 +7,4 @@ openai
 google-adk
 pytest
 httpx
+google-auth

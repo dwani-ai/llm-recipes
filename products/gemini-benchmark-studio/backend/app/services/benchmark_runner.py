@@ -1,7 +1,6 @@
 import csv
 import itertools
 import json
-import os
 import statistics
 import time
 from dataclasses import dataclass
@@ -65,6 +64,8 @@ class Scenario:
 
 class GoogleGenAIAdapter:
     def __init__(self, api_key: str) -> None:
+        if not api_key:
+            raise RuntimeError("api_key is required for google_genai stack.")
         try:
             from google import genai
         except ImportError as exc:
@@ -178,6 +179,8 @@ class GoogleGenAIAdapter:
 
 class OpenAICompatAdapter:
     def __init__(self, api_key: str, base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/") -> None:
+        if not api_key:
+            raise RuntimeError("api_key is required for openai_compat stack.")
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -252,6 +255,32 @@ class OpenAICompatAdapter:
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
         }
+
+
+class VertexAPIAdapter(OpenAICompatAdapter):
+    def __init__(self, project_id: str, location: str, endpoint_id: str, access_token: Optional[str] = None) -> None:
+        token = access_token or self._fetch_adc_token()
+        base_url = (
+            f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/"
+            f"locations/{location}/endpoints/{endpoint_id}"
+        )
+        super().__init__(api_key=token, base_url=base_url)
+
+    @staticmethod
+    def _fetch_adc_token() -> str:
+        try:
+            from google.auth import default
+            from google.auth.transport.requests import Request
+        except ImportError as exc:
+            raise RuntimeError(
+                "google-auth is required for Vertex ADC token fallback."
+            ) from exc
+        credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        credentials.refresh(Request())
+        token = getattr(credentials, "token", None)
+        if not token:
+            raise RuntimeError("Unable to obtain ADC access token for Vertex API.")
+        return token
 
 
 class BenchmarkRunner:
@@ -399,14 +428,27 @@ class BenchmarkRunner:
         adapters: Dict[str, Any] = {}
         if "google_genai" in request.stacks:
             try:
-                adapters["google_genai"] = GoogleGenAIAdapter(request.api_key)
+                adapters["google_genai"] = GoogleGenAIAdapter(request.api_key or "")
             except Exception as exc:
                 adapters["google_genai"] = {"init_error": f"{type(exc).__name__}: {exc}"}
         if "openai_compat" in request.stacks:
             try:
-                adapters["openai_compat"] = OpenAICompatAdapter(request.api_key)
+                adapters["openai_compat"] = OpenAICompatAdapter(request.api_key or "")
             except Exception as exc:
                 adapters["openai_compat"] = {"init_error": f"{type(exc).__name__}: {exc}"}
+        if "vertex_api" in request.stacks:
+            if request.vertex_config is None:
+                adapters["vertex_api"] = {"init_error": "vertex_config is required for vertex_api stack."}
+            else:
+                try:
+                    adapters["vertex_api"] = VertexAPIAdapter(
+                        project_id=request.vertex_config.project_id,
+                        location=request.vertex_config.location,
+                        endpoint_id=request.vertex_config.endpoint_id,
+                        access_token=request.vertex_config.access_token,
+                    )
+                except Exception as exc:
+                    adapters["vertex_api"] = {"init_error": f"{type(exc).__name__}: {exc}"}
 
         raw_rows: List[Dict[str, Any]] = []
         for scenario in scenarios:

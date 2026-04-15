@@ -20,6 +20,10 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
   const [stack, setStack] = useState("google_genai");
+  const [vertexProjectId, setVertexProjectId] = useState("");
+  const [vertexLocation, setVertexLocation] = useState("us-central1");
+  const [vertexEndpointId, setVertexEndpointId] = useState("openapi");
+  const [vertexAccessToken, setVertexAccessToken] = useState("");
   const [trials, setTrials] = useState(10);
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
@@ -128,7 +132,12 @@ export default function App() {
   async function onRunBenchmark() {
     setError(null);
     setResult(null);
-    if (!apiKey.trim()) {
+    if (stack === "vertex_api") {
+      if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
+        setError("Vertex Project ID, Location, and Endpoint ID are required for vertex_api.");
+        return;
+      }
+    } else if (!apiKey.trim()) {
       setError("API key is required to run benchmarks.");
       return;
     }
@@ -136,7 +145,7 @@ export default function App() {
     setIsRunning(true);
     try {
       const payload = {
-        api_key: apiKey.trim(),
+        api_key: apiKey.trim() || undefined,
         stacks: [stack],
         models: [model],
         trials,
@@ -147,6 +156,15 @@ export default function App() {
         mode_selection: modeSelection,
         prompt_template: promptTemplate,
         prompt_variables: variableMap,
+        vertex_config:
+          stack === "vertex_api"
+            ? {
+                project_id: vertexProjectId.trim(),
+                location: vertexLocation.trim(),
+                endpoint_id: vertexEndpointId.trim(),
+                access_token: vertexAccessToken.trim() || undefined,
+              }
+            : undefined,
         include_long_context: true,
       };
       const response = await runBenchmark(payload);
@@ -183,6 +201,7 @@ export default function App() {
             <select value={stack} onChange={(event) => setStack(event.target.value)}>
               <option value="google_genai">google_genai</option>
               <option value="openai_compat">openai_compat</option>
+              <option value="vertex_api">vertex_api</option>
             </select>
           </label>
           <label>
@@ -210,6 +229,43 @@ export default function App() {
             />
           </label>
         </div>
+        {stack === "vertex_api" && (
+          <div className="grid">
+            <label>
+              Vertex Project ID
+              <input
+                value={vertexProjectId}
+                onChange={(event) => setVertexProjectId(event.target.value)}
+                placeholder="your-gcp-project-id"
+              />
+            </label>
+            <label>
+              Vertex Location
+              <input
+                value={vertexLocation}
+                onChange={(event) => setVertexLocation(event.target.value)}
+                placeholder="us-central1"
+              />
+            </label>
+            <label>
+              Vertex Endpoint ID
+              <input
+                value={vertexEndpointId}
+                onChange={(event) => setVertexEndpointId(event.target.value)}
+                placeholder="openapi"
+              />
+            </label>
+            <label>
+              Vertex Access Token (optional)
+              <input
+                type="password"
+                value={vertexAccessToken}
+                onChange={(event) => setVertexAccessToken(event.target.value)}
+                placeholder="Leave empty to use ADC on server"
+              />
+            </label>
+          </div>
+        )}
       </section>
 
       <section className="card">

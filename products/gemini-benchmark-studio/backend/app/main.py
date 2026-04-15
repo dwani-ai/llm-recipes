@@ -68,11 +68,16 @@ async def upload_context_file(
 
 @app.post("/api/benchmark/run", response_model=BenchmarkResponse)
 def run_benchmark(request: BenchmarkRequest) -> BenchmarkResponse:
-    if not request.api_key:
-        raise HTTPException(status_code=400, detail="api_key is required")
+    needs_api_key = any(stack in {"google_genai", "openai_compat"} for stack in request.stacks)
+    if needs_api_key and not request.api_key:
+        raise HTTPException(status_code=400, detail="api_key is required for google_genai/openai_compat stacks")
+    if "vertex_api" in request.stacks and request.vertex_config is None:
+        raise HTTPException(status_code=400, detail="vertex_config is required for vertex_api stack")
     try:
         result = supervisor.run(request)
         request_snapshot = request.model_dump(exclude={"api_key"})
+        if "vertex_config" in request_snapshot and isinstance(request_snapshot["vertex_config"], dict):
+            request_snapshot["vertex_config"].pop("access_token", None)
         history_store.save_run(
             run_id=result.response.run_id,
             request_snapshot=request_snapshot,

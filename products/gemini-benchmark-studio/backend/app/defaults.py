@@ -1,7 +1,7 @@
 from typing import Dict, List
 
 
-DEFAULT_STACKS: List[str] = ["google_genai", "openai_compat"]
+DEFAULT_STACKS: List[str] = ["google_genai", "openai_compat", "vertex_api"]
 DEFAULT_MODELS: List[str] = ["gemini-2.5-flash", "gemini-2.5-pro"]
 DEFAULT_PROMPT_TEMPLATE = (
     "Analyze {{dataset_name}} for {{goal}}. "

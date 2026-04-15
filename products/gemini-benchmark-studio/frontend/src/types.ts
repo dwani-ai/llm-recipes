@@ -5,8 +5,15 @@ export type ModeSelection = {
   explicit_cache: boolean;
 };
 
+export type VertexConfig = {
+  project_id: string;
+  location: string;
+  endpoint_id: string;
+  access_token?: string;
+};
+
 export type BenchmarkRequest = {
-  api_key: string;
+  api_key?: string;
   stacks: string[];
   models: string[];
   trials: number;
@@ -17,6 +24,7 @@ export type BenchmarkRequest = {
   mode_selection: ModeSelection;
   prompt_template: string;
   prompt_variables: Record<string, string>;
+  vertex_config?: VertexConfig;
   include_long_context: boolean;
 };
 

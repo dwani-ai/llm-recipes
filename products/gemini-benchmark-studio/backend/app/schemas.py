@@ -29,8 +29,15 @@ class UploadContextResponse(BaseModel):
     preview: str
 
 
+class VertexConfig(BaseModel):
+    project_id: str = Field(min_length=3)
+    location: str = Field(default="us-central1", min_length=2)
+    endpoint_id: str = Field(default="openapi", min_length=2)
+    access_token: Optional[str] = None
+
+
 class BenchmarkRequest(BaseModel):
-    api_key: str = Field(min_length=10)
+    api_key: Optional[str] = None
     stacks: List[str] = Field(default_factory=lambda: list(DEFAULT_STACKS))
     models: List[str] = Field(default_factory=lambda: list(DEFAULT_MODELS))
     trials: int = Field(default=10, ge=1, le=100)
@@ -41,6 +48,7 @@ class BenchmarkRequest(BaseModel):
     mode_selection: ModeSelection = Field(default_factory=ModeSelection)
     prompt_template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     prompt_variables: Dict[str, str] = Field(default_factory=dict)
+    vertex_config: Optional[VertexConfig] = None
     include_long_context: bool = True
 
 
