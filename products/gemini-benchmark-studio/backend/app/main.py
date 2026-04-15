@@ -1,14 +1,19 @@
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from agent.prompt_optimizer_agent import PromptOptimizerAgent
 from agent.supervisor_agent import SupervisorAgent
 from app.defaults import best_mode_defaults
 from app.schemas import (
     BenchmarkRequest,
     BenchmarkResponse,
     DefaultModesResponse,
+    PromptOptimizeBenchmarkRequest,
+    PromptOptimizeBenchmarkResponse,
     PromptPreviewRequest,
     PromptPreviewResponse,
+    PromptOptimizationRequest,
+    PromptOptimizationResponse,
     RunHistoryItem,
     RunHistoryResponse,
     UploadContextResponse,
@@ -20,6 +25,7 @@ from app.services.prompt_template import render_prompt_template
 
 app = FastAPI(title="Gemini Benchmark Studio API", version="0.1.0")
 supervisor = SupervisorAgent()
+prompt_optimizer = PromptOptimizerAgent()
 history_store = BenchmarkHistoryStore()
 
 app.add_middleware(
@@ -29,6 +35,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _validate_benchmark_request(request: BenchmarkRequest) -> None:
+    needs_api_key = any(stack in {"google_genai", "openai_compat"} for stack in request.stacks)
+    if needs_api_key and not request.api_key:
+        raise HTTPException(status_code=400, detail="api_key is required for google_genai/openai_compat stacks")
+    if "vertex_api" in request.stacks and request.vertex_config is None:
+        raise HTTPException(status_code=400, detail="vertex_config is required for vertex_api stack")
+
+
+def _save_run_history(request: BenchmarkRequest, response: BenchmarkResponse) -> None:
+    request_snapshot = request.model_dump(exclude={"api_key"})
+    if "vertex_config" in request_snapshot and isinstance(request_snapshot["vertex_config"], dict):
+        request_snapshot["vertex_config"].pop("access_token", None)
+    history_store.save_run(
+        run_id=response.run_id,
+        request_snapshot=request_snapshot,
+        best_scenario_id=response.recommendation.best_scenario_id,
+        summaries_count=len(response.summaries),
+        artifacts=response.artifacts,
+    )
 
 
 @app.get("/api/health")
@@ -45,6 +72,11 @@ def default_modes() -> DefaultModesResponse:
 def prompt_preview(request: PromptPreviewRequest) -> PromptPreviewResponse:
     rendered, missing = render_prompt_template(request.template, request.variables)
     return PromptPreviewResponse(rendered_prompt=rendered, missing_variables=missing)
+
+
+@app.post("/api/prompt/optimize", response_model=PromptOptimizationResponse)
+def optimize_prompt(request: PromptOptimizationRequest) -> PromptOptimizationResponse:
+    return prompt_optimizer.optimize(request)
 
 
 @app.post("/api/prompt/upload-context", response_model=UploadContextResponse)
@@ -68,26 +100,28 @@ async def upload_context_file(
 
 @app.post("/api/benchmark/run", response_model=BenchmarkResponse)
 def run_benchmark(request: BenchmarkRequest) -> BenchmarkResponse:
-    needs_api_key = any(stack in {"google_genai", "openai_compat"} for stack in request.stacks)
-    if needs_api_key and not request.api_key:
-        raise HTTPException(status_code=400, detail="api_key is required for google_genai/openai_compat stacks")
-    if "vertex_api" in request.stacks and request.vertex_config is None:
-        raise HTTPException(status_code=400, detail="vertex_config is required for vertex_api stack")
+    _validate_benchmark_request(request)
     try:
         result = supervisor.run(request)
-        request_snapshot = request.model_dump(exclude={"api_key"})
-        if "vertex_config" in request_snapshot and isinstance(request_snapshot["vertex_config"], dict):
-            request_snapshot["vertex_config"].pop("access_token", None)
-        history_store.save_run(
-            run_id=result.response.run_id,
-            request_snapshot=request_snapshot,
-            best_scenario_id=result.response.recommendation.best_scenario_id,
-            summaries_count=len(result.response.summaries),
-            artifacts=result.response.artifacts,
-        )
+        _save_run_history(request, result.response)
         return result.response
     except Exception as exc:
         return supervisor.fallback_response(str(exc))
+
+
+@app.post("/api/prompt/optimize-and-benchmark", response_model=PromptOptimizeBenchmarkResponse)
+def optimize_and_benchmark(request: PromptOptimizeBenchmarkRequest) -> PromptOptimizeBenchmarkResponse:
+    _validate_benchmark_request(request.benchmark)
+    optimization = prompt_optimizer.optimize(request.optimization)
+    benchmark_request = request.benchmark
+    if request.use_winner_template:
+        benchmark_request = request.benchmark.model_copy(update={"prompt_template": optimization.winner_template})
+    try:
+        benchmark_result = supervisor.run(benchmark_request).response
+        _save_run_history(benchmark_request, benchmark_result)
+    except Exception as exc:
+        benchmark_result = supervisor.fallback_response(str(exc))
+    return PromptOptimizeBenchmarkResponse(optimization=optimization, benchmark=benchmark_result)
 
 
 @app.get("/api/benchmark/history", response_model=RunHistoryResponse)

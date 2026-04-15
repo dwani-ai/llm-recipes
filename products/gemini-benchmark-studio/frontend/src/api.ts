@@ -3,6 +3,10 @@ import type {
   BenchmarkRequest,
   BenchmarkResponse,
   DefaultModesResponse,
+  PromptOptimizeBenchmarkRequest,
+  PromptOptimizeBenchmarkResponse,
+  PromptOptimizationRequest,
+  PromptOptimizationResponse,
   RunHistoryResponse,
 } from "./types";
 
@@ -69,6 +73,36 @@ export async function fetchRunHistory(limit = 25): Promise<RunHistoryResponse> {
   const response = await fetch(`${API_BASE_URL}/api/benchmark/history?limit=${limit}`);
   if (!response.ok) {
     throw new Error("Failed to load run history");
+  }
+  return response.json();
+}
+
+export async function optimizePrompt(
+  payload: PromptOptimizationRequest
+): Promise<PromptOptimizationResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/prompt/optimize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Prompt optimization failed: ${text}`);
+  }
+  return response.json();
+}
+
+export async function optimizeAndBenchmark(
+  payload: PromptOptimizeBenchmarkRequest
+): Promise<PromptOptimizeBenchmarkResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/prompt/optimize-and-benchmark`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Optimize + benchmark failed: ${text}`);
   }
   return response.json();
 }

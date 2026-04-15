@@ -22,6 +22,8 @@ Standalone product for benchmarking Gemini response modes with:
   - thinking: `off`
   - cache: `implicit_reuse`
 - Prompt template + variable editor and preview
+- Agent-assisted prompt optimization (objective-based variants + winner selection)
+- One-click optimize + benchmark flow (kept separate from standalone optimize and benchmark actions)
 - Data file upload into `data_context` prompt variable
 - Vertex API credentials form (project, location, endpoint, optional access token)
 - Benchmark run artifacts and recommendation report
@@ -57,6 +59,8 @@ The frontend expects backend at `http://localhost:8000`.
 - `GET /api/health`
 - `GET /api/benchmark/default-modes`
 - `POST /api/prompt/preview`
+- `POST /api/prompt/optimize`
+- `POST /api/prompt/optimize-and-benchmark`
 - `POST /api/prompt/upload-context`
 - `POST /api/benchmark/run`
 - `GET /api/benchmark/history`

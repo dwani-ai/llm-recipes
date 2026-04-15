@@ -140,6 +140,12 @@ button:disabled {
   border-radius: 8px;
 }
 
+.optimize-box {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #d1d5db;
+}
+
 .table-wrapper {
   overflow: auto;
 }

@@ -21,6 +21,42 @@ class PromptPreviewResponse(BaseModel):
     rendered_prompt: str
     missing_variables: List[str]
 
+
+class PromptOptimizationRequest(BaseModel):
+    template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
+    variables: Dict[str, str] = Field(default_factory=dict)
+    objective: str = Field(default="balanced")
+    variant_count: int = Field(default=3, ge=2, le=8)
+    locked_phrases: List[str] = Field(default_factory=list)
+
+
+class PromptVariant(BaseModel):
+    variant_id: str
+    template: str
+    rendered_prompt: str
+    quality_proxy_score: float
+    reasoning: str
+
+
+class PromptOptimizationResponse(BaseModel):
+    objective: str
+    winner_variant_id: str
+    winner_template: str
+    variants: List[PromptVariant]
+    trace: List[str]
+
+
+class PromptOptimizeBenchmarkRequest(BaseModel):
+    benchmark: "BenchmarkRequest"
+    optimization: PromptOptimizationRequest
+    use_winner_template: bool = True
+
+
+class PromptOptimizeBenchmarkResponse(BaseModel):
+    optimization: PromptOptimizationResponse
+    benchmark: "BenchmarkResponse"
+
+
 class UploadContextResponse(BaseModel):
     variable_key: str
     bytes_received: int
@@ -101,4 +137,9 @@ class RunHistoryItem(BaseModel):
 
 class RunHistoryResponse(BaseModel):
     runs: List[RunHistoryItem]
+
+
+PromptOptimizeBenchmarkRequest.model_rebuild()
+PromptOptimizeBenchmarkResponse.model_rebuild()
+
 

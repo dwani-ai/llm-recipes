@@ -85,3 +85,38 @@ export type RunHistoryResponse = {
   runs: RunHistoryItem[];
 };
 
+export type PromptOptimizationRequest = {
+  template: string;
+  variables: Record<string, string>;
+  objective: "lowest_latency" | "highest_quality" | "balanced";
+  variant_count: number;
+  locked_phrases: string[];
+};
+
+export type PromptOptimizationVariant = {
+  variant_id: string;
+  template: string;
+  rendered_prompt: string;
+  quality_proxy_score: number;
+  reasoning: string;
+};
+
+export type PromptOptimizationResponse = {
+  objective: string;
+  winner_variant_id: string;
+  winner_template: string;
+  variants: PromptOptimizationVariant[];
+  trace: string[];
+};
+
+export type PromptOptimizeBenchmarkRequest = {
+  benchmark: BenchmarkRequest;
+  optimization: PromptOptimizationRequest;
+  use_winner_template: boolean;
+};
+
+export type PromptOptimizeBenchmarkResponse = {
+  optimization: PromptOptimizationResponse;
+  benchmark: BenchmarkResponse;
+};
+

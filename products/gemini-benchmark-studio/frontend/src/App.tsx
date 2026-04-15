@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
-import { fetchDefaultModes, fetchRunHistory, previewPrompt, runBenchmark, uploadContextFile } from "./api";
+import {
+  fetchDefaultModes,
+  fetchRunHistory,
+  optimizeAndBenchmark,
+  optimizePrompt,
+  previewPrompt,
+  runBenchmark,
+  uploadContextFile,
+} from "./api";
 import { DEFAULT_MODE_SELECTION, DEFAULT_PROMPT_TEMPLATE } from "./defaults";
-import type { BenchmarkResponse, ModeSelection, RunHistoryItem } from "./types";
+import type {
+  BenchmarkRequest,
+  BenchmarkResponse,
+  ModeSelection,
+  PromptOptimizationResponse,
+  RunHistoryItem,
+} from "./types";
 
 type PromptVarRow = { key: string; value: string };
 
@@ -28,6 +42,10 @@ export default function App() {
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
+  const [optimizationObjective, setOptimizationObjective] =
+    useState<"lowest_latency" | "highest_quality" | "balanced">("balanced");
+  const [optimizationVariantCount, setOptimizationVariantCount] = useState(3);
+  const [lockedPhrases, setLockedPhrases] = useState("");
   const [promptVars, setPromptVars] = useState<PromptVarRow[]>([
     { key: "dataset_name", value: "customer_support_logs" },
     { key: "goal", value: "reduce first token latency while preserving answer quality" },
@@ -36,9 +54,12 @@ export default function App() {
   const [promptPreview, setPromptPreview] = useState("");
   const [previewMissing, setPreviewMissing] = useState<string[]>([]);
   const [result, setResult] = useState<BenchmarkResponse | null>(null);
+  const [optimizationResult, setOptimizationResult] = useState<PromptOptimizationResponse | null>(null);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isOptimizingAndBenchmarking, setIsOptimizingAndBenchmarking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -129,45 +150,121 @@ export default function App() {
     }
   }
 
+  async function handleOptimizePrompt() {
+    setError(null);
+    setIsOptimizing(true);
+    try {
+      const response = await optimizePrompt({
+        template: promptTemplate,
+        variables: variableMap,
+        objective: optimizationObjective,
+        variant_count: optimizationVariantCount,
+        locked_phrases: lockedPhrases
+          .split(",")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0),
+      });
+      setOptimizationResult(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Prompt optimization failed");
+    } finally {
+      setIsOptimizing(false);
+    }
+  }
+
+  function applyWinnerTemplate() {
+    if (!optimizationResult) {
+      return;
+    }
+    setPromptTemplate(optimizationResult.winner_template);
+  }
+
+  function validateRunInputs(): string | null {
+    if (stack === "vertex_api") {
+      if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
+        return "Vertex Project ID, Location, and Endpoint ID are required for vertex_api.";
+      }
+      return null;
+    }
+    if (!apiKey.trim()) {
+      return "API key is required to run benchmarks.";
+    }
+    return null;
+  }
+
+  function buildBenchmarkPayload(templateOverride?: string): BenchmarkRequest {
+    return {
+      api_key: apiKey.trim() || undefined,
+      stacks: [stack],
+      models: [model],
+      trials,
+      warmup_trials: warmupTrials,
+      max_output_tokens: 128,
+      temperature: 0.2,
+      timeout_s: 90,
+      mode_selection: modeSelection,
+      prompt_template: templateOverride ?? promptTemplate,
+      prompt_variables: variableMap,
+      vertex_config:
+        stack === "vertex_api"
+          ? {
+              project_id: vertexProjectId.trim(),
+              location: vertexLocation.trim(),
+              endpoint_id: vertexEndpointId.trim(),
+              access_token: vertexAccessToken.trim() || undefined,
+            }
+          : undefined,
+      include_long_context: true,
+    };
+  }
+
+  async function handleOptimizeAndBenchmark() {
+    setError(null);
+    setResult(null);
+    const validationError = validateRunInputs();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setIsOptimizingAndBenchmarking(true);
+    try {
+      const combined = await optimizeAndBenchmark({
+        benchmark: buildBenchmarkPayload(),
+        optimization: {
+          template: promptTemplate,
+          variables: variableMap,
+          objective: optimizationObjective,
+          variant_count: optimizationVariantCount,
+          locked_phrases: lockedPhrases
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0),
+        },
+        use_winner_template: true,
+      });
+      setOptimizationResult(combined.optimization);
+      setPromptTemplate(combined.optimization.winner_template);
+      setResult(combined.benchmark);
+      await refreshHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Optimize + benchmark failed");
+    } finally {
+      setIsOptimizingAndBenchmarking(false);
+    }
+  }
+
   async function onRunBenchmark() {
     setError(null);
     setResult(null);
-    if (stack === "vertex_api") {
-      if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
-        setError("Vertex Project ID, Location, and Endpoint ID are required for vertex_api.");
-        return;
-      }
-    } else if (!apiKey.trim()) {
-      setError("API key is required to run benchmarks.");
+    const validationError = validateRunInputs();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setIsRunning(true);
     try {
-      const payload = {
-        api_key: apiKey.trim() || undefined,
-        stacks: [stack],
-        models: [model],
-        trials,
-        warmup_trials: warmupTrials,
-        max_output_tokens: 128,
-        temperature: 0.2,
-        timeout_s: 90,
-        mode_selection: modeSelection,
-        prompt_template: promptTemplate,
-        prompt_variables: variableMap,
-        vertex_config:
-          stack === "vertex_api"
-            ? {
-                project_id: vertexProjectId.trim(),
-                location: vertexLocation.trim(),
-                endpoint_id: vertexEndpointId.trim(),
-                access_token: vertexAccessToken.trim() || undefined,
-              }
-            : undefined,
-        include_long_context: true,
-      };
-      const response = await runBenchmark(payload);
+      const response = await runBenchmark(buildBenchmarkPayload());
       setResult(response);
       await refreshHistory();
     } catch (err) {
@@ -354,6 +451,87 @@ export default function App() {
         {previewMissing.length > 0 && (
           <p className="warn">Missing variables: {previewMissing.join(", ")}</p>
         )}
+
+        <div className="optimize-box">
+          <h3>Prompt Optimization Agent</h3>
+          <div className="grid">
+            <label>
+              Objective
+              <select
+                value={optimizationObjective}
+                onChange={(event) =>
+                  setOptimizationObjective(
+                    event.target.value as "lowest_latency" | "highest_quality" | "balanced"
+                  )
+                }
+              >
+                <option value="balanced">balanced</option>
+                <option value="lowest_latency">lowest_latency</option>
+                <option value="highest_quality">highest_quality</option>
+              </select>
+            </label>
+            <label>
+              Variant Count
+              <input
+                type="number"
+                min={2}
+                max={8}
+                value={optimizationVariantCount}
+                onChange={(event) => setOptimizationVariantCount(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Locked Phrases (comma-separated)
+              <input
+                value={lockedPhrases}
+                onChange={(event) => setLockedPhrases(event.target.value)}
+                placeholder="domain term, SLA, compliance"
+              />
+            </label>
+          </div>
+          <div className="actions">
+            <button type="button" onClick={() => void handleOptimizePrompt()} disabled={isOptimizing}>
+              {isOptimizing ? "Optimizing..." : "Optimize Prompt"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleOptimizeAndBenchmark()}
+              disabled={isOptimizingAndBenchmarking || isRunning}
+            >
+              {isOptimizingAndBenchmarking ? "Optimizing + Benchmarking..." : "Optimize + Benchmark"}
+            </button>
+            <button type="button" onClick={applyWinnerTemplate} disabled={!optimizationResult}>
+              Use Winning Template
+            </button>
+          </div>
+          {optimizationResult && (
+            <>
+              <p>
+                <strong>Winner:</strong> {optimizationResult.winner_variant_id}
+              </p>
+              <div className="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Variant</th>
+                      <th>Quality Proxy</th>
+                      <th>Reasoning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {optimizationResult.variants.map((variant) => (
+                      <tr key={variant.variant_id}>
+                        <td>{variant.variant_id}</td>
+                        <td>{variant.quality_proxy_score.toFixed(2)}</td>
+                        <td>{variant.reasoning}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       </section>
 
       <div className="actions">
