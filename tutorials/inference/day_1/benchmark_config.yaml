@@ -1,0 +1,49 @@
+stacks:
+  - google_genai
+  - openai_compat
+
+models:
+  - gemini-2.5-flash
+  - gemini-2.5-pro
+
+modes:
+  - streaming
+  - non_streaming
+
+thinking_modes:
+  - off
+  - on
+
+cache_strategies:
+  - none
+  - implicit_reuse
+  - explicit_cache
+
+prompt_types:
+  - short_prompt
+  - long_context
+
+trials: 8
+warmup_trials: 2
+max_output_tokens: 128
+temperature: 0.2
+timeout_s: 90
+output_dir: outputs/gemini_ttft
+
+openai_base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+
+prompts:
+  short_prompt:
+    system: You are a concise assistant. Keep responses factual.
+    shared_prefix: ""
+    user: Summarize why streaming improves user-perceived latency in 4 bullets.
+  long_context:
+    system: You are a performance engineer. Respond in concise bullets.
+    shared_prefix: |
+      Benchmark context:
+      - We compare streaming and non-streaming requests.
+      - We compare thinking enabled and disabled.
+      - We compare cache strategies for repeated prefixes.
+      - Report TTFT and end-to-end latency.
+      - Prefer concrete optimization ideas.
+    user: Given the context above, propose 5 low-risk latency optimizations.
