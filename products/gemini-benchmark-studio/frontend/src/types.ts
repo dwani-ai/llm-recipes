@@ -120,3 +120,18 @@ export type PromptOptimizeBenchmarkResponse = {
   benchmark: BenchmarkResponse;
 };
 
+export type PromptTokenCountRequest = {
+  stack: string;
+  model: string;
+  api_key?: string;
+  template: string;
+  variables: Record<string, string>;
+  vertex_config?: VertexConfig;
+};
+
+export type PromptTokenCountResponse = {
+  rendered_prompt: string;
+  token_count: number;
+  note?: string | null;
+};
+

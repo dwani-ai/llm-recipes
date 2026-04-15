@@ -22,6 +22,21 @@ class PromptPreviewResponse(BaseModel):
     missing_variables: List[str]
 
 
+class PromptTokenCountRequest(BaseModel):
+    stack: str = Field(default="google_genai")
+    model: str = Field(default="gemini-2.5-flash")
+    api_key: Optional[str] = None
+    template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
+    variables: Dict[str, str] = Field(default_factory=dict)
+    vertex_config: Optional["VertexConfig"] = None
+
+
+class PromptTokenCountResponse(BaseModel):
+    rendered_prompt: str
+    token_count: int
+    note: Optional[str] = None
+
+
 class PromptOptimizationRequest(BaseModel):
     template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     variables: Dict[str, str] = Field(default_factory=dict)
@@ -141,5 +156,6 @@ class RunHistoryResponse(BaseModel):
 
 PromptOptimizeBenchmarkRequest.model_rebuild()
 PromptOptimizeBenchmarkResponse.model_rebuild()
+PromptTokenCountRequest.model_rebuild()
 
 

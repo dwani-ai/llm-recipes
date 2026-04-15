@@ -10,6 +10,8 @@ from app.schemas import (
     DefaultModesResponse,
     PromptOptimizeBenchmarkRequest,
     PromptOptimizeBenchmarkResponse,
+    PromptTokenCountRequest,
+    PromptTokenCountResponse,
     PromptPreviewRequest,
     PromptPreviewResponse,
     PromptOptimizationRequest,
@@ -21,6 +23,7 @@ from app.schemas import (
 from app.services.data_upload import extract_context_from_bytes
 from app.services.history_store import BenchmarkHistoryStore
 from app.services.prompt_template import render_prompt_template
+from app.services.token_counter import TokenCountError, count_tokens_exact
 
 
 app = FastAPI(title="Gemini Benchmark Studio API", version="0.1.0")
@@ -72,6 +75,25 @@ def default_modes() -> DefaultModesResponse:
 def prompt_preview(request: PromptPreviewRequest) -> PromptPreviewResponse:
     rendered, missing = render_prompt_template(request.template, request.variables)
     return PromptPreviewResponse(rendered_prompt=rendered, missing_variables=missing)
+
+
+@app.post("/api/prompt/token-count", response_model=PromptTokenCountResponse)
+def prompt_token_count(request: PromptTokenCountRequest) -> PromptTokenCountResponse:
+    rendered, missing = render_prompt_template(request.template, request.variables)
+    note = None
+    if missing:
+        note = f"Missing variables replaced with empty string: {', '.join(missing)}"
+    try:
+        count = count_tokens_exact(
+            stack=request.stack,
+            model=request.model,
+            prompt_text=rendered,
+            api_key=request.api_key,
+            vertex_config=request.vertex_config,
+        )
+    except TokenCountError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PromptTokenCountResponse(rendered_prompt=rendered, token_count=count, note=note)
 
 
 @app.post("/api/prompt/optimize", response_model=PromptOptimizationResponse)

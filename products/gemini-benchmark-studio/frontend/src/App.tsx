@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from "react"
 
 import {
   fetchDefaultModes,
+  fetchExactTokenCount,
   fetchRunHistory,
   optimizeAndBenchmark,
   optimizePrompt,
@@ -63,6 +64,9 @@ export default function App() {
   const [promptPreview, setPromptPreview] = useState("");
   const [previewMissing, setPreviewMissing] = useState<string[]>([]);
   const [showTokenCount, setShowTokenCount] = useState(false);
+  const [isCountingTokens, setIsCountingTokens] = useState(false);
+  const [exactTokenCount, setExactTokenCount] = useState<number | null>(null);
+  const [tokenCountNote, setTokenCountNote] = useState<string | null>(null);
   const [result, setResult] = useState<BenchmarkResponse | null>(null);
   const [optimizationResult, setOptimizationResult] = useState<PromptOptimizationResponse | null>(null);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
@@ -195,21 +199,36 @@ export default function App() {
     return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   }
 
-  function renderTemplateLocally(template: string, variables: Record<string, string>): string {
-    let rendered = template;
-    for (const [key, value] of Object.entries(variables)) {
-      const pattern = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
-      rendered = rendered.replace(pattern, value);
+  async function handleExactTokenCount() {
+    setError(null);
+    setIsCountingTokens(true);
+    try {
+      const response = await fetchExactTokenCount({
+        stack,
+        model,
+        api_key: apiKey.trim() || undefined,
+        template: promptTemplate,
+        variables: variableMap,
+        vertex_config:
+          stack === "vertex_api"
+            ? {
+                project_id: vertexProjectId.trim(),
+                location: vertexLocation.trim(),
+                endpoint_id: vertexEndpointId.trim(),
+                access_token: vertexAccessToken.trim() || undefined,
+              }
+            : undefined,
+      });
+      setExactTokenCount(response.token_count);
+      setTokenCountNote(response.note ?? null);
+      if (response.rendered_prompt && !promptPreview) {
+        setPromptPreview(response.rendered_prompt);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Exact token count failed");
+    } finally {
+      setIsCountingTokens(false);
     }
-    return rendered;
-  }
-
-  function estimateTokenCount(text: string): number {
-    if (!text.trim()) {
-      return 0;
-    }
-    // Lightweight approximation for quick UX feedback.
-    return text.trim().split(/\s+/).length;
   }
 
   function buildCodeVariations(): CodeVariation[] {
@@ -385,9 +404,6 @@ export default function App() {
       setError("Failed to copy code to clipboard.");
     }
   }
-
-  const selectedPromptForCount = promptPreview || renderTemplateLocally(promptTemplate, variableMap);
-  const estimatedPromptTokens = estimateTokenCount(selectedPromptForCount);
 
   async function copyCurrentTemplateCode() {
     const variations = buildCodeVariations();
@@ -676,6 +692,11 @@ export default function App() {
             />
             Show token count
           </label>
+          {showTokenCount && (
+            <button type="button" onClick={() => void handleExactTokenCount()} disabled={isCountingTokens}>
+              {isCountingTokens ? "Counting..." : "Get Exact Token Count"}
+            </button>
+          )}
           <label className="file-upload">
             Upload Data File
             <input type="file" onChange={(event) => void handleFileUpload(event)} />
@@ -683,7 +704,12 @@ export default function App() {
           {isUploading && <span className="muted">Uploading...</span>}
         </div>
         {showTokenCount && (
-          <p className="muted">Estimated tokens for selected prompt: {estimatedPromptTokens}</p>
+          <div>
+            <p className="muted">
+              Exact tokens for selected prompt: {exactTokenCount ?? "not computed yet"}
+            </p>
+            {tokenCountNote && <p className="muted">{tokenCountNote}</p>}
+          </div>
         )}
         {promptPreview && (
           <div className="preview">

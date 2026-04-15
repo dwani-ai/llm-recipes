@@ -59,6 +59,7 @@ The frontend expects backend at `http://localhost:8000`.
 - `GET /api/health`
 - `GET /api/benchmark/default-modes`
 - `POST /api/prompt/preview`
+- `POST /api/prompt/token-count` (exact provider token count)
 - `POST /api/prompt/optimize`
 - `POST /api/prompt/optimize-and-benchmark`
 - `POST /api/prompt/upload-context`

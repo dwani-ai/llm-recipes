@@ -5,6 +5,8 @@ import type {
   DefaultModesResponse,
   PromptOptimizeBenchmarkRequest,
   PromptOptimizeBenchmarkResponse,
+  PromptTokenCountRequest,
+  PromptTokenCountResponse,
   PromptOptimizationRequest,
   PromptOptimizationResponse,
   RunHistoryResponse,
@@ -103,6 +105,21 @@ export async function optimizeAndBenchmark(
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Optimize + benchmark failed: ${text}`);
+  }
+  return response.json();
+}
+
+export async function fetchExactTokenCount(
+  payload: PromptTokenCountRequest
+): Promise<PromptTokenCountResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/prompt/token-count`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Exact token count failed: ${text}`);
   }
   return response.json();
 }
