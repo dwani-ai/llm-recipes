@@ -172,6 +172,10 @@ button:disabled {
   font-size: 12px;
 }
 
+.code-option {
+  margin-top: 10px;
+}
+
 .table-wrapper {
   overflow: auto;
 }

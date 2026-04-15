@@ -20,6 +20,14 @@ import type {
 } from "./types";
 
 type PromptVarRow = { key: string; value: string };
+type CacheStrategy = "none" | "implicit_reuse" | "explicit_cache";
+type CodeVariation = {
+  id: string;
+  label: string;
+  streaming: boolean;
+  thinking: boolean;
+  cacheStrategy: CacheStrategy;
+};
 
 function toVariableMap(rows: PromptVarRow[]): Record<string, string> {
   const data: Record<string, string> = {};
@@ -54,6 +62,7 @@ export default function App() {
   ]);
   const [promptPreview, setPromptPreview] = useState("");
   const [previewMissing, setPreviewMissing] = useState<string[]>([]);
+  const [showTokenCount, setShowTokenCount] = useState(false);
   const [result, setResult] = useState<BenchmarkResponse | null>(null);
   const [optimizationResult, setOptimizationResult] = useState<PromptOptimizationResponse | null>(null);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
@@ -186,7 +195,45 @@ export default function App() {
     return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   }
 
-  function buildVariantPythonCode(variant: PromptOptimizationVariant): string {
+  function renderTemplateLocally(template: string, variables: Record<string, string>): string {
+    let rendered = template;
+    for (const [key, value] of Object.entries(variables)) {
+      const pattern = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
+      rendered = rendered.replace(pattern, value);
+    }
+    return rendered;
+  }
+
+  function estimateTokenCount(text: string): number {
+    if (!text.trim()) {
+      return 0;
+    }
+    // Lightweight approximation for quick UX feedback.
+    return text.trim().split(/\s+/).length;
+  }
+
+  function buildCodeVariations(): CodeVariation[] {
+    const cacheStrategies: CacheStrategy[] = ["none"];
+    if (modeSelection.implicit_cache) {
+      cacheStrategies.push("implicit_reuse");
+    }
+    if (modeSelection.explicit_cache) {
+      cacheStrategies.push("explicit_cache");
+    }
+    return cacheStrategies.map((cacheStrategy) => {
+      const modeLabel = modeSelection.streaming ? "streaming" : "non_streaming";
+      const thinkingLabel = modeSelection.thinking ? "thinking_on" : "thinking_off";
+      return {
+        id: `${modeLabel}_${thinkingLabel}_${cacheStrategy}`,
+        label: `${modeLabel} | ${thinkingLabel} | cache=${cacheStrategy}`,
+        streaming: modeSelection.streaming,
+        thinking: modeSelection.thinking,
+        cacheStrategy,
+      };
+    });
+  }
+
+  function buildVariantPythonCode(variant: PromptOptimizationVariant, variation: CodeVariation): string {
     const variableEntries = Object.entries(variableMap)
       .map(([key, value]) => `    '${pythonSafeString(key)}': '${pythonSafeString(value)}'`)
       .join(",\n");
@@ -194,8 +241,25 @@ export default function App() {
       "prompt = prompt_template\nfor k, v in prompt_variables.items():\n    prompt = prompt.replace('{{' + k + '}}', str(v))";
 
     if (stack === "google_genai") {
-      const thinkingBudget = modeSelection.thinking ? "1024" : "0";
-      const streamBlock = modeSelection.streaming
+      const thinkingBudget = variation.thinking ? "1024" : "0";
+      const promptPreparation = [
+        "shared_prefix = prompt_variables.get('data_context', '')",
+        "if " + (variation.cacheStrategy === "implicit_reuse" ? "True" : "False") + ":",
+        "    prompt = (shared_prefix + '\\n' + prompt).strip() if shared_prefix else prompt",
+      ].join("\n");
+      const explicitCacheBlock = variation.cacheStrategy === "explicit_cache"
+        ? [
+            "cache_obj = client.caches.create(",
+            "    model=model,",
+            "    config={",
+            "        'contents': [{'role': 'user', 'parts': [{'text': shared_prefix or 'benchmark context'}]}],",
+            "        'ttl': '3600s',",
+            "    },",
+            ")",
+            "config['cached_content'] = cache_obj.name",
+          ].join("\n")
+        : "# explicit cache disabled";
+      const streamBlock = variation.streaming
         ? "stream = client.models.generate_content_stream(\n    model=model,\n    contents=[{'role': 'user', 'parts': [{'text': prompt}]}],\n    config=config,\n)\nfor chunk in stream:\n    print(getattr(chunk, 'text', '') or '', end='')\nprint()"
         : "response = client.models.generate_content(\n    model=model,\n    contents=[{'role': 'user', 'parts': [{'text': prompt}]}],\n    config=config,\n)\nprint(response.text)";
       return [
@@ -209,6 +273,7 @@ export default function App() {
         "}",
         "",
         renderedPromptExpr,
+        promptPreparation,
         "",
         "client = genai.Client(api_key=api_key)",
         "config = {",
@@ -216,6 +281,7 @@ export default function App() {
         `    'temperature': 0.2,`,
         `    'thinking_config': {'thinking_budget': ${thinkingBudget}}`,
         "}",
+        explicitCacheBlock,
         "",
         streamBlock,
         "",
@@ -223,8 +289,19 @@ export default function App() {
     }
 
     if (stack === "openai_compat") {
-      const streamFlag = modeSelection.streaming ? "True" : "False";
-      const streamBlock = modeSelection.streaming
+      const streamFlag = variation.streaming ? "True" : "False";
+      const unsupportedHints = [
+        variation.cacheStrategy === "explicit_cache"
+          ? "# NOTE: explicit cache selection is not supported on openai_compat endpoint."
+          : "# explicit cache not selected",
+        variation.thinking
+          ? "# NOTE: thinking toggle is not supported on openai_compat endpoint."
+          : "# thinking disabled",
+        variation.cacheStrategy === "implicit_reuse"
+          ? "shared_prefix = prompt_variables.get('data_context', '')\nif shared_prefix:\n    prompt = (shared_prefix + '\\n' + prompt).strip()"
+          : "# implicit cache-style prompt reuse disabled",
+      ].join("\n");
+      const streamBlock = variation.streaming
         ? "stream = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=True,\n    max_tokens=128,\n    temperature=0.2,\n)\nfor chunk in stream:\n    text = chunk.choices[0].delta.content or ''\n    print(text, end='')\nprint()"
         : "response = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=False,\n    max_tokens=128,\n    temperature=0.2,\n)\nprint(response.choices[0].message.content)";
       return [
@@ -239,6 +316,7 @@ export default function App() {
         "}",
         "",
         renderedPromptExpr,
+        unsupportedHints,
         "",
         "client = OpenAI(api_key=api_key, base_url=base_url)",
         "messages = [{'role': 'user', 'content': prompt}]",
@@ -257,9 +335,20 @@ export default function App() {
           "credentials.refresh(Request())",
           "access_token = credentials.token",
         ].join("\n");
-    const vertexStreamBlock = modeSelection.streaming
+    const vertexStreamBlockByVariation = variation.streaming
       ? "stream = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=True,\n    max_tokens=128,\n    temperature=0.2,\n)\nfor chunk in stream:\n    text = chunk.choices[0].delta.content or ''\n    print(text, end='')\nprint()"
       : "response = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=False,\n    max_tokens=128,\n    temperature=0.2,\n)\nprint(response.choices[0].message.content)";
+    const vertexHints = [
+      variation.cacheStrategy === "explicit_cache"
+        ? "# NOTE: explicit cache control is not exposed via Vertex OpenAI endpoint path."
+        : "# explicit cache not selected",
+      variation.thinking
+        ? "# NOTE: thinking toggle is not directly available on this endpoint format."
+        : "# thinking disabled",
+      variation.cacheStrategy === "implicit_reuse"
+        ? "shared_prefix = prompt_variables.get('data_context', '')\nif shared_prefix:\n    prompt = (shared_prefix + '\\n' + prompt).strip()"
+        : "# implicit cache-style prompt reuse disabled",
+    ].join("\n");
     return [
       "from openai import OpenAI",
       "",
@@ -277,18 +366,45 @@ export default function App() {
       "}",
       "",
       renderedPromptExpr,
+      vertexHints,
       "",
       "client = OpenAI(api_key=access_token, base_url=base_url)",
       "messages = [{'role': 'user', 'content': prompt}]",
-      vertexStreamBlock,
+      vertexStreamBlockByVariation,
       "",
     ].join("\n");
   }
 
-  async function copyVariantCode(variant: PromptOptimizationVariant) {
+  async function copyVariantCode(variant: PromptOptimizationVariant, variation: CodeVariation) {
+    const key = `${variant.variant_id}:${variation.id}`;
     try {
-      await navigator.clipboard.writeText(buildVariantPythonCode(variant));
-      setCopiedVariantId(variant.variant_id);
+      await navigator.clipboard.writeText(buildVariantPythonCode(variant, variation));
+      setCopiedVariantId(key);
+      setTimeout(() => setCopiedVariantId(null), 1400);
+    } catch {
+      setError("Failed to copy code to clipboard.");
+    }
+  }
+
+  const selectedPromptForCount = promptPreview || renderTemplateLocally(promptTemplate, variableMap);
+  const estimatedPromptTokens = estimateTokenCount(selectedPromptForCount);
+
+  async function copyCurrentTemplateCode() {
+    const variations = buildCodeVariations();
+    const selectedVariation = variations[0];
+    if (!selectedVariation) {
+      return;
+    }
+    const currentVariant: PromptOptimizationVariant = {
+      variant_id: "current_template",
+      template: promptTemplate,
+      rendered_prompt: promptPreview || promptTemplate,
+      quality_proxy_score: 0,
+      reasoning: "Current template preview",
+    };
+    try {
+      await navigator.clipboard.writeText(buildVariantPythonCode(currentVariant, selectedVariation));
+      setCopiedVariantId(`current_template:${selectedVariation.id}`);
       setTimeout(() => setCopiedVariantId(null), 1400);
     } catch {
       setError("Failed to copy code to clipboard.");
@@ -552,12 +668,23 @@ export default function App() {
           <button onClick={() => void handlePreviewPrompt()} type="button">
             Preview Prompt
           </button>
+          <label className="inline-toggle">
+            <input
+              type="checkbox"
+              checked={showTokenCount}
+              onChange={(event) => setShowTokenCount(event.target.checked)}
+            />
+            Show token count
+          </label>
           <label className="file-upload">
             Upload Data File
             <input type="file" onChange={(event) => void handleFileUpload(event)} />
           </label>
           {isUploading && <span className="muted">Uploading...</span>}
         </div>
+        {showTokenCount && (
+          <p className="muted">Estimated tokens for selected prompt: {estimatedPromptTokens}</p>
+        )}
         {promptPreview && (
           <div className="preview">
             <h3>Rendered Prompt</h3>
@@ -655,11 +782,20 @@ export default function App() {
                             <td colSpan={3}>
                               <div className="variant-code-head">
                                 <strong>Python snippet for your project ({variant.variant_id})</strong>
-                                <button type="button" onClick={() => void copyVariantCode(variant)}>
-                                  {copiedVariantId === variant.variant_id ? "Copied" : "Copy Code"}
-                                </button>
                               </div>
-                              <pre className="code-block">{buildVariantPythonCode(variant)}</pre>
+                              {buildCodeVariations().map((variation) => (
+                                <div key={`${variant.variant_id}:${variation.id}`} className="code-option">
+                                  <div className="variant-code-head">
+                                    <span className="muted">{variation.label}</span>
+                                    <button type="button" onClick={() => void copyVariantCode(variant, variation)}>
+                                      {copiedVariantId === `${variant.variant_id}:${variation.id}`
+                                        ? "Copied"
+                                        : "Copy Code"}
+                                    </button>
+                                  </div>
+                                  <pre className="code-block">{buildVariantPythonCode(variant, variation)}</pre>
+                                </div>
+                              ))}
                             </td>
                           </tr>
                         )}
@@ -669,6 +805,38 @@ export default function App() {
                 </table>
               </div>
             </>
+          )}
+          {showVariantCode && !optimizationResult && (
+            <div className="preview">
+              <div className="variant-code-head">
+                <strong>Python snippet for your project (current template)</strong>
+                <button type="button" onClick={() => void copyCurrentTemplateCode()}>
+                  {copiedVariantId?.startsWith("current_template:") ? "Copied" : "Copy First Code Option"}
+                </button>
+              </div>
+              <p className="muted">
+                Run Optimize Prompt to see per-variant snippets. This block is generated from your current template.
+              </p>
+              {buildCodeVariations().map((variation) => (
+                <div key={`current_template:${variation.id}`} className="code-option">
+                  <div className="variant-code-head">
+                    <span className="muted">{variation.label}</span>
+                  </div>
+                  <pre
+                    className="code-block"
+                  >{buildVariantPythonCode(
+                    {
+                      variant_id: "current_template",
+                      template: promptTemplate,
+                      rendered_prompt: promptPreview || promptTemplate,
+                      quality_proxy_score: 0,
+                      reasoning: "Current template preview",
+                    },
+                    variation
+                  )}</pre>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>
