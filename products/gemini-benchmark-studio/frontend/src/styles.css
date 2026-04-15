@@ -146,6 +146,32 @@ button:disabled {
   border-top: 1px dashed #d1d5db;
 }
 
+.inline-toggle {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.variant-code-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.code-block {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 12px;
+}
+
 .table-wrapper {
   overflow: auto;
 }

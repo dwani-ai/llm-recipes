@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
   fetchDefaultModes,
@@ -14,6 +14,7 @@ import type {
   BenchmarkRequest,
   BenchmarkResponse,
   ModeSelection,
+  PromptOptimizationVariant,
   PromptOptimizationResponse,
   RunHistoryItem,
 } from "./types";
@@ -60,6 +61,8 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isOptimizingAndBenchmarking, setIsOptimizingAndBenchmarking] = useState(false);
+  const [showVariantCode, setShowVariantCode] = useState(false);
+  const [copiedVariantId, setCopiedVariantId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -177,6 +180,119 @@ export default function App() {
       return;
     }
     setPromptTemplate(optimizationResult.winner_template);
+  }
+
+  function pythonSafeString(value: string): string {
+    return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
+  function buildVariantPythonCode(variant: PromptOptimizationVariant): string {
+    const variableEntries = Object.entries(variableMap)
+      .map(([key, value]) => `    '${pythonSafeString(key)}': '${pythonSafeString(value)}'`)
+      .join(",\n");
+    const renderedPromptExpr =
+      "prompt = prompt_template\nfor k, v in prompt_variables.items():\n    prompt = prompt.replace('{{' + k + '}}', str(v))";
+
+    if (stack === "google_genai") {
+      const thinkingBudget = modeSelection.thinking ? "1024" : "0";
+      const streamBlock = modeSelection.streaming
+        ? "stream = client.models.generate_content_stream(\n    model=model,\n    contents=[{'role': 'user', 'parts': [{'text': prompt}]}],\n    config=config,\n)\nfor chunk in stream:\n    print(getattr(chunk, 'text', '') or '', end='')\nprint()"
+        : "response = client.models.generate_content(\n    model=model,\n    contents=[{'role': 'user', 'parts': [{'text': prompt}]}],\n    config=config,\n)\nprint(response.text)";
+      return [
+        "from google import genai",
+        "",
+        "api_key = 'YOUR_GEMINI_API_KEY'",
+        `model = '${pythonSafeString(model)}'`,
+        `prompt_template = '${pythonSafeString(variant.template)}'`,
+        "prompt_variables = {",
+        variableEntries || "    # add prompt variables",
+        "}",
+        "",
+        renderedPromptExpr,
+        "",
+        "client = genai.Client(api_key=api_key)",
+        "config = {",
+        `    'max_output_tokens': 128,`,
+        `    'temperature': 0.2,`,
+        `    'thinking_config': {'thinking_budget': ${thinkingBudget}}`,
+        "}",
+        "",
+        streamBlock,
+        "",
+      ].join("\n");
+    }
+
+    if (stack === "openai_compat") {
+      const streamFlag = modeSelection.streaming ? "True" : "False";
+      const streamBlock = modeSelection.streaming
+        ? "stream = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=True,\n    max_tokens=128,\n    temperature=0.2,\n)\nfor chunk in stream:\n    text = chunk.choices[0].delta.content or ''\n    print(text, end='')\nprint()"
+        : "response = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=False,\n    max_tokens=128,\n    temperature=0.2,\n)\nprint(response.choices[0].message.content)";
+      return [
+        "from openai import OpenAI",
+        "",
+        "api_key = 'YOUR_GEMINI_API_KEY'",
+        "base_url = 'https://generativelanguage.googleapis.com/v1beta/openai/'",
+        `model = '${pythonSafeString(model)}'`,
+        `prompt_template = '${pythonSafeString(variant.template)}'`,
+        "prompt_variables = {",
+        variableEntries || "    # add prompt variables",
+        "}",
+        "",
+        renderedPromptExpr,
+        "",
+        "client = OpenAI(api_key=api_key, base_url=base_url)",
+        "messages = [{'role': 'user', 'content': prompt}]",
+        `# streaming=${streamFlag}`,
+        streamBlock,
+        "",
+      ].join("\n");
+    }
+
+    const vertexTokenBlock = vertexAccessToken.trim()
+      ? `access_token = '${pythonSafeString(vertexAccessToken.trim())}'`
+      : [
+          "from google.auth import default",
+          "from google.auth.transport.requests import Request",
+          "credentials, _ = default(scopes=['https://www.googleapis.com/auth/cloud-platform'])",
+          "credentials.refresh(Request())",
+          "access_token = credentials.token",
+        ].join("\n");
+    const vertexStreamBlock = modeSelection.streaming
+      ? "stream = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=True,\n    max_tokens=128,\n    temperature=0.2,\n)\nfor chunk in stream:\n    text = chunk.choices[0].delta.content or ''\n    print(text, end='')\nprint()"
+      : "response = client.chat.completions.create(\n    model=model,\n    messages=messages,\n    stream=False,\n    max_tokens=128,\n    temperature=0.2,\n)\nprint(response.choices[0].message.content)";
+    return [
+      "from openai import OpenAI",
+      "",
+      `project_id = '${pythonSafeString(vertexProjectId || "YOUR_PROJECT_ID")}'`,
+      `location = '${pythonSafeString(vertexLocation || "us-central1")}'`,
+      `endpoint_id = '${pythonSafeString(vertexEndpointId || "openapi")}'`,
+      "base_url = f'https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}'",
+      "",
+      vertexTokenBlock,
+      "",
+      `model = '${pythonSafeString(model)}'`,
+      `prompt_template = '${pythonSafeString(variant.template)}'`,
+      "prompt_variables = {",
+      variableEntries || "    # add prompt variables",
+      "}",
+      "",
+      renderedPromptExpr,
+      "",
+      "client = OpenAI(api_key=access_token, base_url=base_url)",
+      "messages = [{'role': 'user', 'content': prompt}]",
+      vertexStreamBlock,
+      "",
+    ].join("\n");
+  }
+
+  async function copyVariantCode(variant: PromptOptimizationVariant) {
+    try {
+      await navigator.clipboard.writeText(buildVariantPythonCode(variant));
+      setCopiedVariantId(variant.variant_id);
+      setTimeout(() => setCopiedVariantId(null), 1400);
+    } catch {
+      setError("Failed to copy code to clipboard.");
+    }
   }
 
   function validateRunInputs(): string | null {
@@ -503,6 +619,14 @@ export default function App() {
             <button type="button" onClick={applyWinnerTemplate} disabled={!optimizationResult}>
               Use Winning Template
             </button>
+            <label className="inline-toggle">
+              <input
+                type="checkbox"
+                checked={showVariantCode}
+                onChange={(event) => setShowVariantCode(event.target.checked)}
+              />
+              Show project-ready Python code
+            </label>
           </div>
           {optimizationResult && (
             <>
@@ -520,11 +644,26 @@ export default function App() {
                   </thead>
                   <tbody>
                     {optimizationResult.variants.map((variant) => (
-                      <tr key={variant.variant_id}>
-                        <td>{variant.variant_id}</td>
-                        <td>{variant.quality_proxy_score.toFixed(2)}</td>
-                        <td>{variant.reasoning}</td>
-                      </tr>
+                      <Fragment key={variant.variant_id}>
+                        <tr key={variant.variant_id}>
+                          <td>{variant.variant_id}</td>
+                          <td>{variant.quality_proxy_score.toFixed(2)}</td>
+                          <td>{variant.reasoning}</td>
+                        </tr>
+                        {showVariantCode && (
+                          <tr key={`${variant.variant_id}-code`}>
+                            <td colSpan={3}>
+                              <div className="variant-code-head">
+                                <strong>Python snippet for your project ({variant.variant_id})</strong>
+                                <button type="button" onClick={() => void copyVariantCode(variant)}>
+                                  {copiedVariantId === variant.variant_id ? "Copied" : "Copy Code"}
+                                </button>
+                              </div>
+                              <pre className="code-block">{buildVariantPythonCode(variant)}</pre>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
