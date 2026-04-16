@@ -331,6 +331,15 @@ function cacheIntentFromMode(mode: ModeSelection): CacheIntent {
   return "none";
 }
 
+function toDateTimeLocalString(input: Date): string {
+  const year = input.getFullYear();
+  const month = String(input.getMonth() + 1).padStart(2, "0");
+  const day = String(input.getDate()).padStart(2, "0");
+  const hours = String(input.getHours()).padStart(2, "0");
+  const minutes = String(input.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
@@ -345,6 +354,10 @@ export default function App() {
   const [thinkingTokenBudget, setThinkingTokenBudget] = useState(1024);
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleStartLocal, setScheduleStartLocal] = useState(
+    toDateTimeLocalString(new Date(Date.now() + 5 * 60 * 1000))
+  );
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
   const [selectedUseCaseId, setSelectedUseCaseId] = useState("");
   const [optimizationObjective, setOptimizationObjective] =
@@ -829,10 +842,17 @@ export default function App() {
     if (!apiKey.trim()) {
       return "API key is required to run benchmarks.";
     }
+    if (scheduleEnabled && !scheduleStartLocal.trim()) {
+      return "Select a schedule start time for the 15-minute window.";
+    }
     return null;
   }
 
   function buildBenchmarkPayload(templateOverride?: string): BenchmarkRequest {
+    const scheduleStartIso =
+      scheduleEnabled && scheduleStartLocal
+        ? new Date(scheduleStartLocal).toISOString()
+        : undefined;
     return {
       api_key: apiKey.trim() || undefined,
       stacks: [stack],
@@ -857,6 +877,9 @@ export default function App() {
           : undefined,
       include_long_context: true,
       recommendation_objective: benchmarkObjective,
+      schedule_enabled: scheduleEnabled,
+      schedule_start_at: scheduleStartIso,
+      schedule_window_minutes: 15,
     };
   }
 
@@ -1024,7 +1047,31 @@ export default function App() {
               <option value="reliability_first">reliability_first</option>
             </select>
           </label>
+          <label className="inline-toggle">
+            <input
+              type="checkbox"
+              checked={scheduleEnabled}
+              onChange={(event) => setScheduleEnabled(event.target.checked)}
+            />
+            Schedule across 15-minute window
+          </label>
+          {scheduleEnabled && (
+            <label>
+              Window Start Time
+              <input
+                type="datetime-local"
+                value={scheduleStartLocal}
+                onChange={(event) => setScheduleStartLocal(event.target.value)}
+              />
+            </label>
+          )}
         </div>
+        {scheduleEnabled && (
+          <p className="muted">
+            Trials are spread across a fixed 15-minute window so you can observe latency behavior at the
+            selected time.
+          </p>
+        )}
         {stack === "vertex_api" && (
           <div className="grid">
             <label>
@@ -1418,6 +1465,12 @@ export default function App() {
           <p>
             <strong>Run ID:</strong> {result.run_id}
           </p>
+          {result.artifacts.schedule_window_start && result.artifacts.schedule_window_end && (
+            <p>
+              <strong>Scheduled Window:</strong> {result.artifacts.schedule_window_start} to{" "}
+              {result.artifacts.schedule_window_end}
+            </p>
+          )}
           <p>
             <strong>Best Scenario:</strong> {result.recommendation.best_scenario_id ?? "n/a"}
           </p>

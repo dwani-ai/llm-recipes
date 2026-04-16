@@ -27,6 +27,7 @@ Standalone product for benchmarking Gemini response modes with:
 - One-click optimize + benchmark flow (kept separate from standalone optimize and benchmark actions)
 - Data file upload into `data_context` prompt variable
 - Vertex API credentials form (project, location, endpoint, optional access token)
+- Scheduled run window (fixed 15 minutes) to measure latency behavior at selected time
 - Benchmark run artifacts and recommendation report
 - Run history endpoint and UI table for recent runs
 
@@ -386,6 +387,7 @@ Run this sequence after setup:
    - ranked scenarios are present
    - disqualified reasons are understandable
    - best scenario can be applied to form controls.
+   - if schedule is enabled, artifacts include `schedule_window_start` and `schedule_window_end`.
 
 ## Run Tests
 

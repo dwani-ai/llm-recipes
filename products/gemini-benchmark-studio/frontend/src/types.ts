@@ -28,6 +28,9 @@ export type BenchmarkRequest = {
   vertex_config?: VertexConfig;
   include_long_context: boolean;
   recommendation_objective?: "lowest_latency" | "balanced" | "reliability_first";
+  schedule_enabled?: boolean;
+  schedule_start_at?: string;
+  schedule_window_minutes?: number;
 };
 
 export type ScenarioSummary = {

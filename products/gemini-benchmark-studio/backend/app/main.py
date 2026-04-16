@@ -46,6 +46,11 @@ def _validate_benchmark_request(request: BenchmarkRequest) -> None:
         raise HTTPException(status_code=400, detail="api_key is required for google_genai/openai_compat stacks")
     if "vertex_api" in request.stacks and request.vertex_config is None:
         raise HTTPException(status_code=400, detail="vertex_config is required for vertex_api stack")
+    if request.schedule_enabled:
+        if request.schedule_start_at is None:
+            raise HTTPException(status_code=400, detail="schedule_start_at is required when schedule_enabled is true")
+        if request.schedule_window_minutes != 15:
+            raise HTTPException(status_code=400, detail="Only a 15-minute scheduling window is supported currently")
 
 
 def _save_run_history(request: BenchmarkRequest, response: BenchmarkResponse) -> None:

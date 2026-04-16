@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -121,6 +122,9 @@ class BenchmarkRequest(BaseModel):
     recommendation_objective: Literal["lowest_latency", "balanced", "reliability_first"] = Field(
         default="lowest_latency"
     )
+    schedule_enabled: bool = False
+    schedule_start_at: Optional[datetime] = None
+    schedule_window_minutes: int = Field(default=15, ge=1, le=60)
 
 
 class ScenarioSummary(BaseModel):

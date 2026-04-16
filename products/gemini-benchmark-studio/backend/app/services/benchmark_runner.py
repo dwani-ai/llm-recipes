@@ -4,7 +4,7 @@ import json
 import statistics
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -449,6 +449,19 @@ class BenchmarkRunner:
             lines.append(f"| {idx} | {row['scenario_id']} | {ttft} | {e2e} | {tps} | {note} |")
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+    def _scheduled_slots(self, request: BenchmarkRequest, total_iterations: int) -> List[datetime]:
+        if not request.schedule_enabled or total_iterations <= 0:
+            return []
+        start_at = request.schedule_start_at or datetime.now(tz=timezone.utc)
+        if start_at.tzinfo is None:
+            start_at = start_at.replace(tzinfo=timezone.utc)
+        start_at = start_at.astimezone(timezone.utc)
+        window_seconds = request.schedule_window_minutes * 60
+        if total_iterations == 1:
+            return [start_at]
+        step_seconds = window_seconds / float(total_iterations - 1)
+        return [start_at + timedelta(seconds=(idx * step_seconds)) for idx in range(total_iterations)]
+
     def run(self, request: BenchmarkRequest, rendered_prompt: str) -> Dict[str, Any]:
         run_id = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         run_dir = self.output_root / run_id
@@ -504,6 +517,7 @@ class BenchmarkRunner:
                         "output_tokens": None,
                         "tokens_per_s": None,
                         "ttft_definition": "first_output_token",
+                        "scheduled_for": None,
                         "reason": f"unsupported_stack:{scenario.stack}",
                         "error": None,
                     }
@@ -530,18 +544,28 @@ class BenchmarkRunner:
                         "output_tokens": None,
                         "tokens_per_s": None,
                         "ttft_definition": "first_output_token",
+                        "scheduled_for": None,
                         "reason": None,
                         "error": adapter["init_error"],
                     }
                 )
                 continue
             prompt_cfg = prompts[scenario.prompt_type]
-            for iteration in range(scenario.warmup_trials + scenario.trials):
+            total_iterations = scenario.warmup_trials + scenario.trials
+            scheduled_slots = self._scheduled_slots(request, total_iterations)
+            for iteration in range(total_iterations):
                 is_warmup = iteration < scenario.warmup_trials
+                scheduled_for = scheduled_slots[iteration] if scheduled_slots else None
+                if scheduled_for is not None:
+                    now_dt = datetime.now(tz=timezone.utc)
+                    wait_s = (scheduled_for - now_dt).total_seconds()
+                    if wait_s > 0:
+                        time.sleep(wait_s)
+                started_at = utc_now_iso()
                 payload = adapter.run_once(scenario, prompt_cfg)
                 raw_rows.append(
                     {
-                        "started_at": utc_now_iso(),
+                        "started_at": started_at,
                         "scenario_id": scenario.scenario_id,
                         "stack": scenario.stack,
                         "model": scenario.model,
@@ -558,6 +582,7 @@ class BenchmarkRunner:
                         "output_tokens": payload.get("output_tokens"),
                         "tokens_per_s": payload.get("tokens_per_s"),
                         "ttft_definition": payload.get("ttft_definition", "first_output_token"),
+                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": payload.get("reason"),
                         "error": payload.get("error"),
                     }
@@ -576,15 +601,26 @@ class BenchmarkRunner:
         report_md = run_dir / "report.md"
         self._write_report(report_md, summaries)
 
+        artifacts: Dict[str, str] = {
+            "output_root": str(run_dir),
+            "raw_jsonl": str(raw_path),
+            "summary_json": str(summary_json),
+            "summary_csv": str(summary_csv),
+            "report_md": str(report_md),
+        }
+        if request.schedule_enabled:
+            start_at = request.schedule_start_at or datetime.now(tz=timezone.utc)
+            if start_at.tzinfo is None:
+                start_at = start_at.replace(tzinfo=timezone.utc)
+            start_at = start_at.astimezone(timezone.utc)
+            artifacts["schedule_window_start"] = start_at.isoformat()
+            artifacts["schedule_window_end"] = (
+                start_at + timedelta(minutes=request.schedule_window_minutes)
+            ).isoformat()
+
         return {
             "run_id": run_id,
             "summaries": summaries,
-            "artifacts": {
-                "output_root": str(run_dir),
-                "raw_jsonl": str(raw_path),
-                "summary_json": str(summary_json),
-                "summary_csv": str(summary_csv),
-                "report_md": str(report_md),
-            },
+            "artifacts": artifacts,
         }
 
