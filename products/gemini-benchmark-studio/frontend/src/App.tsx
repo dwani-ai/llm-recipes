@@ -49,7 +49,18 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "customer_support_tickets_q2",
       goal: "reduce repeat escalation rate",
-      data_context: "Ticket logs include category, sentiment score, and resolution status for 45,000 interactions.",
+      data_context: `Ticket sample (Q2):
+ticket_id,channel,region,product,issue_category,priority,sentiment,first_response_min,resolution_hours,escalated,reopen_count,agent_tier
+T-1001,email,US,CoreApp,Billing,high,-0.62,47,31.2,yes,2,tier_1
+T-1002,chat,IN,MobileSDK,Login,medium,-0.18,4,2.8,no,0,tier_1
+T-1003,email,UK,CoreApp,Performance,high,-0.74,39,28.5,yes,1,tier_2
+T-1004,web,DE,AdminConsole,Permissions,medium,-0.22,13,7.1,no,0,tier_2
+T-1005,chat,US,CoreApp,DataSync,high,-0.68,6,19.4,yes,1,tier_2
+T-1006,email,AU,MobileSDK,Crash,critical,-0.83,52,41.0,yes,3,tier_3
+Notes:
+- Reopened escalations are concentrated in Billing + Crash.
+- Tier_1 handoffs to Tier_2 add average 5.3h cycle delay.
+- Customers with sentiment below -0.60 have 2.4x escalation probability.`,
     },
     recommended: {
       stack: "google_genai",
@@ -65,7 +76,20 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "fraud_detection_alerts_weekly",
       goal: "cut false positives while preserving recall",
-      data_context: "Alert data includes score bands, investigator outcomes, and merchant risk cohorts.",
+      data_context: `Fraud alerts (weekly extract):
+alert_id,merchant_segment,txn_amount_usd,geo_velocity_flag,device_mismatch,score_band,manual_review,outcome,chargeback_within_30d
+F-901,marketplace,1240,true,true,0.92,approve,legit,false
+F-902,subscription,89,false,false,0.44,approve,legit,false
+F-903,digital_goods,410,true,false,0.77,decline,fraud,true
+F-904,travel,2200,true,true,0.95,decline,fraud,true
+F-905,retail,130,false,true,0.63,approve,legit,false
+F-906,subscription,310,false,false,0.52,approve,legit,false
+F-907,digital_goods,980,true,true,0.88,decline,fraud,true
+F-908,retail,75,false,false,0.29,approve,legit,false
+Policy notes:
+- Current threshold 0.60 triggers manual review.
+- False positives are highest in retail low-ticket transactions.
+- Geo velocity + device mismatch together predict confirmed fraud strongly.`,
     },
     recommended: {
       stack: "google_genai",
@@ -80,7 +104,30 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "incident_postmortems_platform_ops",
       goal: "reduce mean time to recovery",
-      data_context: "Postmortems cover incident timeline, blast radius, root cause class, and mitigation actions.",
+      data_context: `Incident postmortems:
+[INC-221] API timeout storm
+- Start: 2026-02-03 09:12 UTC
+- Blast radius: 34% of /search requests
+- Root cause: cache node eviction + connection pool exhaustion
+- Detection lag: 11m
+- MTTR: 74m
+- Action items: warm pool on deploy, add p95 saturation alerts
+
+[INC-227] Auth token validation backlog
+- Start: 2026-02-21 18:42 UTC
+- Blast radius: login failures in eu-west
+- Root cause: regional Kafka lag + retry amplification
+- Detection lag: 7m
+- MTTR: 49m
+- Action items: bounded retries, consumer lag SLOs
+
+[INC-233] Feature flag rollout regression
+- Start: 2026-03-10 02:10 UTC
+- Blast radius: admin console 500s
+- Root cause: schema mismatch in canary path
+- Detection lag: 15m
+- MTTR: 96m
+- Action items: pre-rollout schema contract checks, rollback guardrails`,
     },
     recommended: {
       stack: "google_genai",
@@ -97,7 +144,32 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
       dataset_name: "product_docs_and_runbooks",
       goal: "improve support deflection rate",
       data_context:
-        "Extensive static corpus: product docs, onboarding guides, troubleshooting runbooks, and changelog notes.",
+        `Docs corpus excerpt:
+[Onboarding Guide v4]
+1. Create tenant and assign org admin.
+2. Configure SSO (SAML/OIDC), then enforce MFA.
+3. Install agent package on at least 3 representative hosts.
+4. Validate ingestion in Data Health dashboard.
+
+[Troubleshooting Runbook: Data Sync Lag]
+- Symptom: dashboard freshness > 15 min
+- Checks:
+  a) verify connector heartbeat
+  b) inspect ingestion queue depth
+  c) confirm API quota utilization below 85%
+- Mitigations:
+  a) trigger incremental resync
+  b) scale ingest workers +1
+  c) rotate connector token if auth retries > 20
+
+[Release Notes 2026.3]
+- New: adaptive backoff for connector retries
+- Changed: default retention from 30d to 45d
+- Known issue: legacy OAuth scopes may fail on older connectors
+
+[FAQ snippets]
+Q: Why is report generation delayed?
+A: Usually quota throttling or failed incremental checkpoints.`,
     },
     recommended: {
       stack: "google_genai",
@@ -112,7 +184,18 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "weekly_marketing_performance",
       goal: "improve paid channel efficiency",
-      data_context: "Campaign data contains spend, conversion funnel metrics, and region-level attribution reports.",
+      data_context: `Campaign weekly metrics:
+week,channel,region,spend_usd,impressions,clicks,ctr,landing_cv_rate,mql_rate,pipeline_usd,cac_usd
+2026-W10,search,US,92000,2.1M,104000,4.95,0.082,0.214,1.32M,780
+2026-W10,social,US,61000,4.8M,72000,1.50,0.029,0.132,0.41M,1120
+2026-W10,display,EU,38000,6.2M,41000,0.66,0.018,0.089,0.19M,1490
+2026-W11,search,US,97000,2.3M,110000,4.78,0.079,0.201,1.28M,810
+2026-W11,social,EU,54000,4.2M,68000,1.62,0.031,0.126,0.36M,1195
+2026-W11,partners,APAC,29000,0.9M,21000,2.33,0.067,0.241,0.52M,640
+Notes:
+- Search drives largest pipeline but CAC drifted +4%.
+- Social has high impression volume with weak downstream conversion.
+- Partner channel in APAC is efficient but limited scale.`,
     },
     recommended: {
       stack: "openai_compat",
@@ -128,7 +211,19 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "finance_close_cycle_exceptions",
       goal: "reduce month-end reconciliation delays",
-      data_context: "Exception logs include ledger mismatches, owner teams, aging buckets, and resolution patterns.",
+      data_context: `Close-cycle exception log:
+exception_id,ledger_domain,amount_usd,owner_team,age_days,root_cause,status
+E-3001,revenue_recognition,182000,revops,6,contract_term_mismatch,open
+E-3002,intercompany,74000,corp_finance,4,fx_rate_timing,resolved
+E-3003,accruals,129000,fp&a,9,missing_approver,open
+E-3004,ap_clearing,51000,shared_services,3,duplicate_invoice,resolved
+E-3005,revenue_recognition,221000,revops,11,manual_override_without_audit,open
+E-3006,bank_recon,39000,treasury,8,statement_import_delay,open
+E-3007,intercompany,87000,corp_finance,10,counterparty_mapping_gap,open
+Control observations:
+- 63% of exceptions over 7 days involve revops + corp_finance handoffs.
+- Missing approvals and manual overrides are the largest recurring contributors.
+- SLA breach threshold is 8 days; current median is 8.6 days.`,
     },
     recommended: {
       stack: "google_genai",
@@ -143,7 +238,19 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "knowledge_base_quality_audit",
       goal: "identify stale articles and ownership gaps",
-      data_context: "Audit snapshot includes article freshness, broken links, unresolved feedback, and owner metadata.",
+      data_context: `KB quality audit snapshot:
+article_id,topic,last_updated_days,broken_links,helpful_ratio,negative_feedback_count,owner_team,owner_assigned
+KB-11,SSO setup,410,3,0.61,42,identity,false
+KB-18,Billing exports,96,0,0.84,6,finance_tools,true
+KB-24,Agent install Linux,290,2,0.69,27,platform,true
+KB-31,Data retention policy,505,1,0.58,33,security,false
+KB-37,API pagination,77,0,0.88,4,developer_experience,true
+KB-44,Webhook retries,340,4,0.55,51,integrations,false
+KB-52,Role permissions matrix,220,1,0.66,19,admin_console,true
+Findings:
+- Articles older than 300 days account for most negative feedback.
+- Ownership missing on critical policy and integration docs.
+- Broken links cluster around migration guides after 2026.1 release.`,
     },
     recommended: {
       stack: "vertex_api",
@@ -159,7 +266,31 @@ const SAMPLE_USE_CASES: SampleUseCase[] = [
     variables: {
       dataset_name: "security_control_evidence_repository",
       goal: "prepare SOC2 gap-closure plan",
-      data_context: "Evidence repository contains policy docs, control test logs, auditor notes, and system ownership maps.",
+      data_context: `Security evidence bundle:
+[Control CC6.1 - Access Reviews]
+- Current cadence: quarterly
+- Last completed: 2026-01-10
+- Exceptions: 17 stale privileged accounts, 6 unresolved manager attestations
+
+[Control CC7.2 - Incident Response]
+- Runbook exists; tabletop completed 2025-11
+- Gap: no documented post-incident retrospective SLA
+- Evidence missing for two severity-2 incidents
+
+[Control A1.2 - Change Management]
+- CI/CD approvals enforced for production branches
+- Gap: emergency change pathway bypass logs not centrally archived
+
+[Auditor Notes]
+- Need stronger linkage between policy exceptions and compensating controls.
+- Vendor risk reviews are inconsistent across critical sub-processors.
+- Monitoring dashboards present, but retention for alert evidence only 30 days.
+
+[Ownership map]
+- Identity: security_platform
+- Infra logging: sre_core
+- Vendor risk: compliance_ops
+- Evidence collection automation: security_eng`,
     },
     recommended: {
       stack: "google_genai",
