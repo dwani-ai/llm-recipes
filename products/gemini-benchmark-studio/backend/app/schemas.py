@@ -29,11 +29,27 @@ class PromptTokenCountRequest(BaseModel):
     template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     variables: Dict[str, str] = Field(default_factory=dict)
     vertex_config: Optional["VertexConfig"] = None
+    mode_selection: ModeSelection = Field(default_factory=ModeSelection)
+    include_long_context: bool = True
+    calls_for_savings: int = Field(default=10, ge=1, le=1000)
+
+
+class PromptTokenBreakdownItem(BaseModel):
+    prompt_type: str
+    strategy: str
+    baseline_request_tokens: int
+    request_tokens: int
+    cache_create_tokens: int = 0
+    first_call_total_tokens: int
+    subsequent_call_tokens: int
+    savings_vs_baseline_after_n_calls: int
 
 
 class PromptTokenCountResponse(BaseModel):
     rendered_prompt: str
     token_count: int
+    calls_for_savings: int
+    breakdown: List[PromptTokenBreakdownItem] = Field(default_factory=list)
     note: Optional[str] = None
 
 

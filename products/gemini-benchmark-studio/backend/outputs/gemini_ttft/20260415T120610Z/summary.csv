@@ -1,0 +1,5 @@
+scenario_id,stack,model,mode,thinking,cache_strategy,prompt_type,samples,ok_count,unsupported_count,error_count,ttft_p50_s,ttft_p95_s,e2e_p50_s,tokens_per_s_avg,note
+google_genai|gemini-2.5-flash|streaming|thinking_False|cache_none|long_context,google_genai,gemini-2.5-flash,streaming,False,none,long_context,10,10,0,0,1.2841633680000086,1.8429558104020543,1.7950291449997167,49.26529044992616,
+google_genai|gemini-2.5-flash|streaming|thinking_False|cache_none|short_prompt,google_genai,gemini-2.5-flash,streaming,False,none,short_prompt,10,10,0,0,1.3375671434987453,1.737485947800451,1.8442523334997531,45.11836667176282,
+google_genai|gemini-2.5-flash|streaming|thinking_False|cache_explicit_cache|short_prompt,google_genai,gemini-2.5-flash,streaming,False,explicit_cache,short_prompt,10,0,10,0,,,,,explicit_cache_create_failed:ClientError
+google_genai|gemini-2.5-flash|streaming|thinking_False|cache_explicit_cache|long_context,google_genai,gemini-2.5-flash,streaming,False,explicit_cache,long_context,10,0,10,0,,,,,explicit_cache_create_failed:ClientError

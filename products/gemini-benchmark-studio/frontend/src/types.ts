@@ -127,11 +127,27 @@ export type PromptTokenCountRequest = {
   template: string;
   variables: Record<string, string>;
   vertex_config?: VertexConfig;
+  mode_selection: ModeSelection;
+  include_long_context: boolean;
+  calls_for_savings: number;
+};
+
+export type PromptTokenBreakdownItem = {
+  prompt_type: string;
+  strategy: string;
+  baseline_request_tokens: number;
+  request_tokens: number;
+  cache_create_tokens: number;
+  first_call_total_tokens: number;
+  subsequent_call_tokens: number;
+  savings_vs_baseline_after_n_calls: number;
 };
 
 export type PromptTokenCountResponse = {
   rendered_prompt: string;
   token_count: number;
+  calls_for_savings: number;
+  breakdown: PromptTokenBreakdownItem[];
   note?: string | null;
 };
 

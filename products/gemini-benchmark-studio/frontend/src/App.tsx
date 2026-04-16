@@ -15,6 +15,7 @@ import type {
   BenchmarkRequest,
   BenchmarkResponse,
   ModeSelection,
+  PromptTokenBreakdownItem,
   PromptOptimizationVariant,
   PromptOptimizationResponse,
   RunHistoryItem,
@@ -337,6 +338,8 @@ export default function App() {
   const [showTokenCount, setShowTokenCount] = useState(false);
   const [isCountingTokens, setIsCountingTokens] = useState(false);
   const [exactTokenCount, setExactTokenCount] = useState<number | null>(null);
+  const [tokenBreakdown, setTokenBreakdown] = useState<PromptTokenBreakdownItem[]>([]);
+  const [tokenSavingsCalls, setTokenSavingsCalls] = useState(10);
   const [tokenCountNote, setTokenCountNote] = useState<string | null>(null);
   const [result, setResult] = useState<BenchmarkResponse | null>(null);
   const [optimizationResult, setOptimizationResult] = useState<PromptOptimizationResponse | null>(null);
@@ -414,6 +417,7 @@ export default function App() {
     setPromptPreview("");
     setPreviewMissing([]);
     setExactTokenCount(null);
+    setTokenBreakdown([]);
     setTokenCountNote(null);
   }
 
@@ -496,6 +500,9 @@ export default function App() {
         api_key: apiKey.trim() || undefined,
         template: promptTemplate,
         variables: variableMap,
+        mode_selection: modeSelection,
+        include_long_context: true,
+        calls_for_savings: tokenSavingsCalls,
         vertex_config:
           stack === "vertex_api"
             ? {
@@ -507,6 +514,8 @@ export default function App() {
             : undefined,
       });
       setExactTokenCount(response.token_count);
+      setTokenBreakdown(response.breakdown);
+      setTokenSavingsCalls(response.calls_for_savings);
       setTokenCountNote(response.note ?? null);
       if (response.rendered_prompt && !promptPreview) {
         setPromptPreview(response.rendered_prompt);
@@ -996,6 +1005,20 @@ export default function App() {
             Show token count
           </label>
           {showTokenCount && (
+            <label>
+              Calls for savings
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={tokenSavingsCalls}
+                onChange={(event) =>
+                  setTokenSavingsCalls(Math.max(1, Math.min(1000, Number(event.target.value) || 1)))
+                }
+              />
+            </label>
+          )}
+          {showTokenCount && (
             <button type="button" onClick={() => void handleExactTokenCount()} disabled={isCountingTokens}>
               {isCountingTokens ? "Counting..." : "Get Exact Token Count"}
             </button>
@@ -1011,6 +1034,38 @@ export default function App() {
             <p className="muted">
               Exact tokens for selected prompt: {exactTokenCount ?? "not computed yet"}
             </p>
+            {tokenBreakdown.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Prompt Type</th>
+                      <th>Strategy</th>
+                      <th>Baseline</th>
+                      <th>Request</th>
+                      <th>Cache Create</th>
+                      <th>First Call</th>
+                      <th>Later Calls</th>
+                      <th>Savings @ {tokenSavingsCalls} calls</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tokenBreakdown.map((row) => (
+                      <tr key={`${row.prompt_type}:${row.strategy}`}>
+                        <td>{row.prompt_type}</td>
+                        <td>{row.strategy}</td>
+                        <td>{row.baseline_request_tokens}</td>
+                        <td>{row.request_tokens}</td>
+                        <td>{row.cache_create_tokens}</td>
+                        <td>{row.first_call_total_tokens}</td>
+                        <td>{row.subsequent_call_tokens}</td>
+                        <td>{row.savings_vs_baseline_after_n_calls}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             {tokenCountNote && <p className="muted">{tokenCountNote}</p>}
           </div>
         )}

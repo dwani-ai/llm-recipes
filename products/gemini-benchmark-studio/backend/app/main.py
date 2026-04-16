@@ -23,7 +23,7 @@ from app.schemas import (
 from app.services.data_upload import extract_context_from_bytes
 from app.services.history_store import BenchmarkHistoryStore
 from app.services.prompt_template import render_prompt_template
-from app.services.token_counter import TokenCountError, count_tokens_exact
+from app.services.token_counter import TokenCountError, mode_aware_token_breakdown
 
 
 app = FastAPI(title="Gemini Benchmark Studio API", version="0.1.0")
@@ -84,16 +84,26 @@ def prompt_token_count(request: PromptTokenCountRequest) -> PromptTokenCountResp
     if missing:
         note = f"Missing variables replaced with empty string: {', '.join(missing)}"
     try:
-        count = count_tokens_exact(
+        token_data = mode_aware_token_breakdown(
             stack=request.stack,
             model=request.model,
-            prompt_text=rendered,
             api_key=request.api_key,
             vertex_config=request.vertex_config,
+            rendered_prompt=rendered,
+            prompt_variables=request.variables,
+            mode_selection=request.mode_selection,
+            include_long_context=request.include_long_context,
+            calls_for_savings=request.calls_for_savings,
         )
     except TokenCountError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return PromptTokenCountResponse(rendered_prompt=rendered, token_count=count, note=note)
+    return PromptTokenCountResponse(
+        rendered_prompt=rendered,
+        token_count=token_data["token_count"],
+        calls_for_savings=request.calls_for_savings,
+        breakdown=token_data["breakdown"],
+        note=note,
+    )
 
 
 @app.post("/api/prompt/optimize", response_model=PromptOptimizationResponse)
