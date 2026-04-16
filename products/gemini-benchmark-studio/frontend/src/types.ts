@@ -22,6 +22,7 @@ export type BenchmarkRequest = {
   temperature: number;
   timeout_s: number;
   mode_selection: ModeSelection;
+  thinking_token_budget?: number;
   prompt_template: string;
   prompt_variables: Record<string, string>;
   vertex_config?: VertexConfig;
@@ -35,6 +36,7 @@ export type ScenarioSummary = {
   model: string;
   mode: string;
   thinking: boolean;
+  thinking_token_budget: number;
   cache_strategy: string;
   prompt_type: string;
   samples: number;
@@ -45,6 +47,7 @@ export type ScenarioSummary = {
   ttft_p95_s: number | null;
   e2e_p50_s: number | null;
   tokens_per_s_avg: number | null;
+  ttft_definition: string;
   note: string | null;
 };
 
@@ -94,6 +97,7 @@ export type DefaultModesResponse = {
     model: string;
     streaming: boolean;
     thinking: boolean;
+    thinking_token_budget: number;
     implicit_cache: boolean;
     explicit_cache: boolean;
     trials: number;

@@ -342,6 +342,7 @@ export default function App() {
   const [trials, setTrials] = useState(10);
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
+  const [thinkingTokenBudget, setThinkingTokenBudget] = useState(1024);
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
@@ -408,6 +409,7 @@ export default function App() {
           implicit_cache: data.defaults.implicit_cache,
           explicit_cache: data.defaults.explicit_cache,
         });
+        setThinkingTokenBudget(data.defaults.thinking_token_budget ?? 1024);
         setCacheIntent(
           cacheIntentFromMode({
             streaming: data.defaults.streaming,
@@ -498,6 +500,7 @@ export default function App() {
     setModel(sample.recommended.model);
     setModeSelection(sample.recommended.modeSelection);
     setCacheIntent(cacheIntentFromMode(sample.recommended.modeSelection));
+    setThinkingTokenBudget(1024);
     setPromptPreview("");
     setPreviewMissing([]);
     setExactTokenCount(null);
@@ -635,7 +638,7 @@ export default function App() {
       "prompt = prompt_template\nfor k, v in prompt_variables.items():\n    prompt = prompt.replace('{{' + k + '}}', str(v))";
 
     if (stack === "google_genai") {
-      const thinkingBudget = variation.thinking ? "1024" : "0";
+      const thinkingBudget = variation.thinking ? String(thinkingTokenBudget) : "0";
       const promptPreparation = [
         "shared_prefix = prompt_variables.get('data_context', '')",
         "if " + (variation.cacheStrategy === "implicit_reuse" ? "True" : "False") + ":",
@@ -820,6 +823,9 @@ export default function App() {
     if (!stackCapabilities.explicitCache && modeSelection.explicit_cache) {
       return `${stack} does not support explicit cache in this benchmark path. Use implicit reuse or switch stack.`;
     }
+    if (modeSelection.thinking && thinkingTokenBudget <= 0) {
+      return "Thinking token budget must be greater than 0 when thinking is enabled.";
+    }
     if (!apiKey.trim()) {
       return "API key is required to run benchmarks.";
     }
@@ -837,6 +843,7 @@ export default function App() {
       temperature: 0.2,
       timeout_s: 90,
       mode_selection: modeFromCacheIntent(cacheIntent, modeSelection),
+      thinking_token_budget: thinkingTokenBudget,
       prompt_template: templateOverride ?? promptTemplate,
       prompt_variables: variableMap,
       vertex_config:
@@ -873,6 +880,7 @@ export default function App() {
       explicit_cache: bestSummary.cache_strategy === "explicit_cache",
     };
     setModeSelection(nextMode);
+    setThinkingTokenBudget(bestSummary.thinking_token_budget ?? 1024);
     setCacheIntent(cacheIntentFromMode(nextMode));
     setHighlightedScenarioId(bestSummary.scenario_id);
   }
@@ -1078,6 +1086,17 @@ export default function App() {
             Thinking
           </label>
           <label>
+            Thinking Token Budget
+            <input
+              type="number"
+              min={0}
+              max={8192}
+              value={thinkingTokenBudget}
+              disabled={!modeSelection.thinking}
+              onChange={(event) => setThinkingTokenBudget(Math.max(0, Number(event.target.value) || 0))}
+            />
+          </label>
+          <label>
             Cache Intent
             <select
               value={cacheIntent}
@@ -1093,7 +1112,7 @@ export default function App() {
         </div>
         <p className="muted">
           Current mode: {modeSelection.streaming ? "streaming" : "non_streaming"} | thinking=
-          {String(modeSelection.thinking)} | cache={cacheIntent}
+          {String(modeSelection.thinking)} | thinking_budget={thinkingTokenBudget} | cache={cacheIntent}
         </p>
       </section>
 
@@ -1517,6 +1536,7 @@ export default function App() {
                   <th>Model</th>
                   <th>Mode</th>
                   <th>Thinking</th>
+                  <th>Thinking Budget</th>
                   <th>Cache</th>
                   <th>Prompt Type</th>
                   <th>OK</th>
@@ -1548,6 +1568,7 @@ export default function App() {
                     <td>{row.model}</td>
                     <td>{row.mode}</td>
                     <td>{String(row.thinking)}</td>
+                    <td>{row.thinking_token_budget}</td>
                     <td>{row.cache_strategy}</td>
                     <td>{row.prompt_type}</td>
                     <td>{row.ok_count}</td>
@@ -1558,7 +1579,7 @@ export default function App() {
                     <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.tokens_per_s_avg?.toFixed(2) ?? "n/a"}</td>
-                    <td>{row.note ?? "ok"}</td>
+                    <td>{row.note ?? row.ttft_definition ?? "ok"}</td>
                   </tr>
                 ))}
               </tbody>

@@ -26,6 +26,7 @@ def test_supervisor_handles_missing_template_variables(monkeypatch) -> None:
                     "model": "gemini-2.5-flash",
                     "mode": "streaming",
                     "thinking": False,
+                    "thinking_token_budget": 1024,
                     "cache_strategy": "none",
                     "prompt_type": "short_prompt",
                     "samples": 1,
@@ -36,6 +37,7 @@ def test_supervisor_handles_missing_template_variables(monkeypatch) -> None:
                     "ttft_p95_s": 0.25,
                     "e2e_p50_s": 0.9,
                     "tokens_per_s_avg": 21.0,
+                    "ttft_definition": "first_final_output_token",
                     "note": None,
                 }
             ],

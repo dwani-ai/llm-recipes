@@ -14,6 +14,7 @@ Standalone product for benchmarking Gemini response modes with:
 
 - API key input from UI for each run (not persisted)
 - Checkbox mode selection
+- Thinking token budget control (`thinking_token_budget`)
 - Stack selection: `google_genai`, `openai_compat`, `vertex_api`
 - Best known mode defaults preselected:
   - stack: `google_genai`
@@ -298,6 +299,11 @@ For every benchmark run, the backend:
    - `ranked_scenarios`
    - `disqualified_scenarios` with reasons
    - `reliability_score` and confidence label
+
+TTFT measurement detail:
+
+- For streaming + thinking on `google_genai`, TTFT is measured at the first **final output token** after internal thinking, not at the first internal reasoning chunk.
+- For non-streaming calls, TTFT equals response completion time.
 
 Interpretation guide:
 

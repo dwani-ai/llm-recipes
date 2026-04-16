@@ -15,6 +15,7 @@ def best_mode_defaults() -> Dict[str, object]:
         "model": "gemini-2.5-flash",
         "streaming": True,
         "thinking": False,
+        "thinking_token_budget": 1024,
         "implicit_cache": True,
         "explicit_cache": False,
         "trials": 10,

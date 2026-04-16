@@ -113,6 +113,7 @@ class BenchmarkRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     timeout_s: int = Field(default=90, ge=10, le=300)
     mode_selection: ModeSelection = Field(default_factory=ModeSelection)
+    thinking_token_budget: int = Field(default=1024, ge=0, le=8192)
     prompt_template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     prompt_variables: Dict[str, str] = Field(default_factory=dict)
     vertex_config: Optional[VertexConfig] = None
@@ -128,6 +129,7 @@ class ScenarioSummary(BaseModel):
     model: str
     mode: str
     thinking: bool
+    thinking_token_budget: int
     cache_strategy: str
     prompt_type: str
     samples: int
@@ -138,6 +140,7 @@ class ScenarioSummary(BaseModel):
     ttft_p95_s: Optional[float] = None
     e2e_p50_s: Optional[float] = None
     tokens_per_s_avg: Optional[float] = None
+    ttft_definition: str = "first_final_output_token"
     note: Optional[str] = None
 
 

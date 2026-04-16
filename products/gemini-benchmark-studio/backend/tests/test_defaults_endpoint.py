@@ -11,5 +11,6 @@ def test_default_modes_endpoint_has_best_defaults() -> None:
     assert payload["stack"] == "google_genai"
     assert payload["streaming"] is True
     assert payload["thinking"] is False
+    assert payload["thinking_token_budget"] == 1024
     assert payload["implicit_cache"] is True
 

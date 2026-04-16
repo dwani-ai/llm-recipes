@@ -46,6 +46,7 @@ class Scenario:
     model: str
     mode: str
     thinking: bool
+    thinking_token_budget: int
     cache_strategy: str
     prompt_type: str
     trials: int
@@ -58,7 +59,7 @@ class Scenario:
     def scenario_id(self) -> str:
         return (
             f"{self.stack}|{self.model}|{self.mode}|thinking_{self.thinking}|"
-            f"cache_{self.cache_strategy}|{self.prompt_type}"
+            f"thinking_budget_{self.thinking_token_budget}|cache_{self.cache_strategy}|{self.prompt_type}"
         )
 
 
@@ -79,7 +80,7 @@ class GoogleGenAIAdapter:
             "temperature": scenario.temperature,
         }
         if scenario.thinking:
-            cfg["thinking_config"] = {"thinking_budget": 1024}
+            cfg["thinking_config"] = {"thinking_budget": scenario.thinking_token_budget}
         else:
             cfg["thinking_config"] = {"thinking_budget": 0}
         if explicit_cache_name:
@@ -111,6 +112,25 @@ class GoogleGenAIAdapter:
         self.cache_by_key[key] = cache_name
         return cache_name, None
 
+    def _extract_final_output_text(self, chunk: Any) -> str:
+        candidates = getattr(chunk, "candidates", None) or []
+        saw_structured_parts = False
+        visible_parts: List[str] = []
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) or []
+            for part in parts:
+                text = getattr(part, "text", None)
+                if text is None:
+                    continue
+                saw_structured_parts = True
+                if getattr(part, "thought", False):
+                    continue
+                visible_parts.append(text)
+        if saw_structured_parts:
+            return normalize_text(visible_parts)
+        return getattr(chunk, "text", "") or ""
+
     def run_once(self, scenario: Scenario, prompt_cfg: Dict[str, str]) -> Dict[str, Any]:
         explicit_cache_name = None
         if scenario.cache_strategy == "explicit_cache":
@@ -127,7 +147,7 @@ class GoogleGenAIAdapter:
 
     def _streaming(self, scenario: Scenario, contents: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
         start = time.perf_counter()
-        first_chunk: Optional[float] = None
+        first_final_output_chunk: Optional[float] = None
         parts: List[str] = []
         try:
             stream = self.client.models.generate_content_stream(
@@ -136,15 +156,20 @@ class GoogleGenAIAdapter:
                 config=config,
             )
             for chunk in stream:
-                if first_chunk is None:
-                    first_chunk = time.perf_counter()
-                parts.append(getattr(chunk, "text", "") or "")
+                text_piece = (
+                    self._extract_final_output_text(chunk)
+                    if scenario.thinking
+                    else (getattr(chunk, "text", "") or "")
+                )
+                if first_final_output_chunk is None and text_piece.strip():
+                    first_final_output_chunk = time.perf_counter()
+                parts.append(text_piece)
             end = time.perf_counter()
         except Exception as exc:  # pragma: no cover
             return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
         text = normalize_text(parts)
         total = end - start
-        ttft = (first_chunk - start) if first_chunk else total
+        ttft = (first_final_output_chunk - start) if first_final_output_chunk else total
         tokens = estimate_tokens(text)
         return {
             "status": "ok",
@@ -152,6 +177,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "first_final_output_token",
         }
 
     def _non_streaming(self, scenario: Scenario, contents: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -174,6 +200,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "response_complete_non_streaming",
         }
 
 
@@ -229,6 +256,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "first_output_token",
         }
 
     def _non_streaming(self, scenario: Scenario, messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -254,6 +282,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "response_complete_non_streaming",
         }
 
 
@@ -319,6 +348,7 @@ class BenchmarkRunner:
                     max_output_tokens=request.max_output_tokens,
                     temperature=request.temperature,
                     timeout_s=request.timeout_s,
+                    thinking_token_budget=request.thinking_token_budget,
                 )
             )
         return scenarios
@@ -378,6 +408,7 @@ class BenchmarkRunner:
                     "model": first["model"],
                     "mode": first["mode"],
                     "thinking": first["thinking"],
+                    "thinking_token_budget": first["thinking_token_budget"],
                     "cache_strategy": first["cache_strategy"],
                     "prompt_type": first["prompt_type"],
                     "samples": len(items),
@@ -388,6 +419,7 @@ class BenchmarkRunner:
                     "ttft_p95_s": percentile(ttfts, 95),
                     "e2e_p50_s": percentile(e2es, 50),
                     "tokens_per_s_avg": statistics.fmean(tps) if tps else None,
+                    "ttft_definition": first.get("ttft_definition", "first_output_token"),
                     "note": unsupported[0] if unsupported else (errors[0] if errors else None),
                 }
             )
@@ -461,6 +493,7 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
                         "iteration": 0,
@@ -470,6 +503,7 @@ class BenchmarkRunner:
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
+                        "ttft_definition": "first_output_token",
                         "reason": f"unsupported_stack:{scenario.stack}",
                         "error": None,
                     }
@@ -485,6 +519,7 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
                         "iteration": 0,
@@ -494,6 +529,7 @@ class BenchmarkRunner:
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
+                        "ttft_definition": "first_output_token",
                         "reason": None,
                         "error": adapter["init_error"],
                     }
@@ -511,6 +547,7 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
                         "iteration": iteration,
@@ -520,6 +557,7 @@ class BenchmarkRunner:
                         "e2e_s": payload.get("e2e_s"),
                         "output_tokens": payload.get("output_tokens"),
                         "tokens_per_s": payload.get("tokens_per_s"),
+                        "ttft_definition": payload.get("ttft_definition", "first_output_token"),
                         "reason": payload.get("reason"),
                         "error": payload.get("error"),
                     }
