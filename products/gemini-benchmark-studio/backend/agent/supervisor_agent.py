@@ -80,19 +80,35 @@ class SupervisorAgent:
         trace.extend(tool_output.trace)
         trace.append(f"SupervisorAgent: tool outputs={tool_output.outputs}.")
 
-        analyzer = self.analyzer.analyze(summaries_raw)
+        analyzer = self.analyzer.analyze(summaries_raw, objective=request.recommendation_objective)
         trace.extend(analyzer.trace)
 
-        optimizer = self.optimizer.suggest(analyzer.best_row)
+        optimizer = self.optimizer.suggest(
+            best_row=analyzer.best_row,
+            ranked_scenarios=analyzer.ranked_scenarios,
+            disqualified_scenarios=analyzer.disqualified_scenarios,
+        )
         trace.extend(optimizer.trace)
 
-        reporter = self.reporter.report(analyzer.best_row, summaries_raw)
+        reporter = self.reporter.report(
+            best_row=analyzer.best_row,
+            summaries=summaries_raw,
+            ranked_scenarios=analyzer.ranked_scenarios,
+            confidence=analyzer.confidence,
+            reliability_score=analyzer.reliability_score,
+            objective=request.recommendation_objective,
+        )
         trace.extend(reporter.trace)
 
         recommendation = BenchmarkRecommendation(
             best_scenario_id=analyzer.best_scenario_id,
             rationale=reporter.rationale,
             alternatives=optimizer.alternatives,
+            ranked_scenarios=analyzer.ranked_scenarios,
+            disqualified_scenarios=analyzer.disqualified_scenarios,
+            reliability_score=analyzer.reliability_score,
+            confidence=analyzer.confidence,
+            objective=request.recommendation_objective,
         )
 
         summaries = [ScenarioSummary(**row) for row in summaries_raw]
@@ -119,6 +135,11 @@ class SupervisorAgent:
                     "Retry with fewer scenarios or trials.",
                     "Check network connectivity for model endpoints.",
                 ],
+                ranked_scenarios=[],
+                disqualified_scenarios=[],
+                reliability_score=0.0,
+                confidence="low",
+                objective="lowest_latency",
             ),
             reasoning_trace=["SupervisorAgent: fallback response returned after workflow failure."],
             artifacts={},

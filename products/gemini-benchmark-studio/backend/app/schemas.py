@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -117,6 +117,9 @@ class BenchmarkRequest(BaseModel):
     prompt_variables: Dict[str, str] = Field(default_factory=dict)
     vertex_config: Optional[VertexConfig] = None
     include_long_context: bool = True
+    recommendation_objective: Literal["lowest_latency", "balanced", "reliability_first"] = Field(
+        default="lowest_latency"
+    )
 
 
 class ScenarioSummary(BaseModel):
@@ -142,6 +145,11 @@ class BenchmarkRecommendation(BaseModel):
     best_scenario_id: Optional[str] = None
     rationale: str
     alternatives: List[str] = Field(default_factory=list)
+    ranked_scenarios: List[Dict[str, Any]] = Field(default_factory=list)
+    disqualified_scenarios: List[Dict[str, str]] = Field(default_factory=list)
+    reliability_score: float = 0.0
+    confidence: str = "low"
+    objective: str = "lowest_latency"
 
 
 class BenchmarkResponse(BaseModel):

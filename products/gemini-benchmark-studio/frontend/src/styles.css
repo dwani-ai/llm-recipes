@@ -180,6 +180,43 @@ button:disabled {
   overflow: auto;
 }
 
+.row-highlight {
+  background: #eef2ff;
+}
+
+.row-status-disqualified {
+  background: #fff7ed;
+}
+
+.row-status-unstable {
+  background: #fef2f2;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.badge-eligible {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-partial {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.badge-unstable,
+.badge-disqualified {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

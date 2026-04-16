@@ -23,6 +23,8 @@ import type {
 
 type PromptVarRow = { key: string; value: string };
 type CacheStrategy = "none" | "implicit_reuse" | "explicit_cache";
+type CacheIntent = "none" | "implicit_reuse" | "explicit_cache";
+type BenchmarkObjective = "lowest_latency" | "balanced" | "reliability_first";
 type CodeVariation = {
   id: string;
   label: string;
@@ -311,6 +313,24 @@ function toVariableMap(rows: PromptVarRow[]): Record<string, string> {
   return data;
 }
 
+function modeFromCacheIntent(cacheIntent: CacheIntent, base: ModeSelection): ModeSelection {
+  return {
+    ...base,
+    implicit_cache: cacheIntent === "implicit_reuse",
+    explicit_cache: cacheIntent === "explicit_cache",
+  };
+}
+
+function cacheIntentFromMode(mode: ModeSelection): CacheIntent {
+  if (mode.explicit_cache) {
+    return "explicit_cache";
+  }
+  if (mode.implicit_cache) {
+    return "implicit_reuse";
+  }
+  return "none";
+}
+
 export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
@@ -322,6 +342,8 @@ export default function App() {
   const [trials, setTrials] = useState(10);
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
+  const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
+  const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
   const [selectedUseCaseId, setSelectedUseCaseId] = useState("");
   const [optimizationObjective, setOptimizationObjective] =
@@ -348,9 +370,31 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isOptimizingAndBenchmarking, setIsOptimizingAndBenchmarking] = useState(false);
+  const [lastOptimizeBenchmarkTemplateBefore, setLastOptimizeBenchmarkTemplateBefore] = useState<string | null>(null);
+  const [lastOptimizeBenchmarkTemplateAfter, setLastOptimizeBenchmarkTemplateAfter] = useState<string | null>(null);
   const [showVariantCode, setShowVariantCode] = useState(false);
   const [copiedVariantId, setCopiedVariantId] = useState<string | null>(null);
+  const [highlightedScenarioId, setHighlightedScenarioId] = useState<string | null>(null);
+  const [historyCompareA, setHistoryCompareA] = useState("");
+  const [historyCompareB, setHistoryCompareB] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const stackCapabilities = useMemo(() => {
+    if (stack === "google_genai") {
+      return { thinking: true, explicitCache: true, note: null as string | null };
+    }
+    if (stack === "openai_compat") {
+      return {
+        thinking: false,
+        explicitCache: false,
+        note: "openai_compat does not expose explicit cache or thinking controls in this benchmark path.",
+      };
+    }
+    return {
+      thinking: false,
+      explicitCache: false,
+      note: "vertex_api OpenAI endpoint path has limited thinking/explicit cache controls.",
+    };
+  }, [stack]);
 
   useEffect(() => {
     void fetchDefaultModes()
@@ -364,6 +408,14 @@ export default function App() {
           implicit_cache: data.defaults.implicit_cache,
           explicit_cache: data.defaults.explicit_cache,
         });
+        setCacheIntent(
+          cacheIntentFromMode({
+            streaming: data.defaults.streaming,
+            thinking: data.defaults.thinking,
+            implicit_cache: data.defaults.implicit_cache,
+            explicit_cache: data.defaults.explicit_cache,
+          })
+        );
       })
       .catch(() => {
         // Keep local defaults if endpoint is unavailable.
@@ -374,6 +426,26 @@ export default function App() {
         // Ignore history load failure on startup.
       });
   }, []);
+
+  useEffect(() => {
+    setModeSelection((prev) => {
+      let next = { ...prev };
+      let changed = false;
+      if (!stackCapabilities.thinking && next.thinking) {
+        next = { ...next, thinking: false };
+        changed = true;
+      }
+      if (!stackCapabilities.explicitCache && next.explicit_cache) {
+        next = { ...next, explicit_cache: false };
+        changed = true;
+      }
+      if (!changed) {
+        return prev;
+      }
+      setCacheIntent(cacheIntentFromMode(next));
+      return next;
+    });
+  }, [stackCapabilities]);
 
   const variableMap = useMemo(() => toVariableMap(promptVars), [promptVars]);
 
@@ -389,7 +461,18 @@ export default function App() {
   }
 
   function updateMode(field: keyof ModeSelection, value: boolean) {
-    setModeSelection((prev) => ({ ...prev, [field]: value }));
+    setModeSelection((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "implicit_cache" || field === "explicit_cache") {
+        setCacheIntent(cacheIntentFromMode(next));
+      }
+      return next;
+    });
+  }
+
+  function updateCacheIntent(nextIntent: CacheIntent) {
+    setCacheIntent(nextIntent);
+    setModeSelection((prev) => modeFromCacheIntent(nextIntent, prev));
   }
 
   function updateVar(index: number, field: "key" | "value", value: string) {
@@ -414,6 +497,7 @@ export default function App() {
     setStack(sample.recommended.stack);
     setModel(sample.recommended.model);
     setModeSelection(sample.recommended.modeSelection);
+    setCacheIntent(cacheIntentFromMode(sample.recommended.modeSelection));
     setPromptPreview("");
     setPreviewMissing([]);
     setExactTokenCount(null);
@@ -500,7 +584,7 @@ export default function App() {
         api_key: apiKey.trim() || undefined,
         template: promptTemplate,
         variables: variableMap,
-        mode_selection: modeSelection,
+        mode_selection: modeFromCacheIntent(cacheIntent, modeSelection),
         include_long_context: true,
         calls_for_savings: tokenSavingsCalls,
         vertex_config:
@@ -528,13 +612,8 @@ export default function App() {
   }
 
   function buildCodeVariations(): CodeVariation[] {
-    const cacheStrategies: CacheStrategy[] = ["none"];
-    if (modeSelection.implicit_cache) {
-      cacheStrategies.push("implicit_reuse");
-    }
-    if (modeSelection.explicit_cache) {
-      cacheStrategies.push("explicit_cache");
-    }
+    const cacheStrategies: CacheStrategy[] =
+      cacheIntent === "none" ? ["none"] : [cacheIntent];
     return cacheStrategies.map((cacheStrategy) => {
       const modeLabel = modeSelection.streaming ? "streaming" : "non_streaming";
       const thinkingLabel = modeSelection.thinking ? "thinking_on" : "thinking_off";
@@ -703,8 +782,7 @@ export default function App() {
 
   async function copyCurrentTemplateCode() {
     const variations = buildCodeVariations();
-    const selectedVariation = variations[0];
-    if (!selectedVariation) {
+    if (variations.length === 0) {
       return;
     }
     const currentVariant: PromptOptimizationVariant = {
@@ -715,8 +793,14 @@ export default function App() {
       reasoning: "Current template preview",
     };
     try {
-      await navigator.clipboard.writeText(buildVariantPythonCode(currentVariant, selectedVariation));
-      setCopiedVariantId(`current_template:${selectedVariation.id}`);
+      const bundled = variations
+        .map(
+          (variation) =>
+            `# ${variation.label}\n\n${buildVariantPythonCode(currentVariant, variation)}`
+        )
+        .join("\n\n# ----\n\n");
+      await navigator.clipboard.writeText(bundled);
+      setCopiedVariantId(`current_template:${variations[0].id}`);
       setTimeout(() => setCopiedVariantId(null), 1400);
     } catch {
       setError("Failed to copy code to clipboard.");
@@ -729,6 +813,12 @@ export default function App() {
         return "Vertex Project ID, Location, and Endpoint ID are required for vertex_api.";
       }
       return null;
+    }
+    if (!stackCapabilities.thinking && modeSelection.thinking) {
+      return `${stack} does not support the thinking toggle in this benchmark path. Disable thinking or switch stack.`;
+    }
+    if (!stackCapabilities.explicitCache && modeSelection.explicit_cache) {
+      return `${stack} does not support explicit cache in this benchmark path. Use implicit reuse or switch stack.`;
     }
     if (!apiKey.trim()) {
       return "API key is required to run benchmarks.";
@@ -746,7 +836,7 @@ export default function App() {
       max_output_tokens: 128,
       temperature: 0.2,
       timeout_s: 90,
-      mode_selection: modeSelection,
+      mode_selection: modeFromCacheIntent(cacheIntent, modeSelection),
       prompt_template: templateOverride ?? promptTemplate,
       prompt_variables: variableMap,
       vertex_config:
@@ -759,7 +849,45 @@ export default function App() {
             }
           : undefined,
       include_long_context: true,
+      recommendation_objective: benchmarkObjective,
     };
+  }
+
+  function applyRecommendedSettings() {
+    if (!result?.recommendation.best_scenario_id) {
+      return;
+    }
+    const bestSummary = result.summaries.find(
+      (row) => row.scenario_id === result.recommendation.best_scenario_id
+    );
+    if (!bestSummary) {
+      setError("Could not map best scenario to summary row.");
+      return;
+    }
+    setStack(bestSummary.stack);
+    setModel(bestSummary.model);
+    const nextMode: ModeSelection = {
+      streaming: bestSummary.mode === "streaming",
+      thinking: bestSummary.thinking,
+      implicit_cache: bestSummary.cache_strategy === "implicit_reuse",
+      explicit_cache: bestSummary.cache_strategy === "explicit_cache",
+    };
+    setModeSelection(nextMode);
+    setCacheIntent(cacheIntentFromMode(nextMode));
+    setHighlightedScenarioId(bestSummary.scenario_id);
+  }
+
+  function scenarioStatus(row: BenchmarkResponse["summaries"][number]): string {
+    if (row.ok_count <= 0) {
+      return "disqualified";
+    }
+    if (row.error_count > 0) {
+      return "unstable";
+    }
+    if (row.unsupported_count > 0) {
+      return "partial";
+    }
+    return "eligible";
   }
 
   async function handleOptimizeAndBenchmark() {
@@ -772,6 +900,7 @@ export default function App() {
     }
     setIsOptimizingAndBenchmarking(true);
     try {
+      const beforeTemplate = promptTemplate;
       const combined = await optimizeAndBenchmark({
         benchmark: buildBenchmarkPayload(),
         optimization: {
@@ -787,6 +916,8 @@ export default function App() {
         use_winner_template: true,
       });
       setOptimizationResult(combined.optimization);
+      setLastOptimizeBenchmarkTemplateBefore(beforeTemplate);
+      setLastOptimizeBenchmarkTemplateAfter(combined.optimization.winner_template);
       setPromptTemplate(combined.optimization.winner_template);
       setResult(combined.benchmark);
       await refreshHistory();
@@ -817,6 +948,11 @@ export default function App() {
       setIsRunning(false);
     }
   }
+
+  const bestRankedScenario = result?.recommendation.ranked_scenarios?.[0] ?? null;
+  const runnerUpScenario = result?.recommendation.ranked_scenarios?.[1] ?? null;
+  const historyA = history.find((item) => item.run_id === historyCompareA);
+  const historyB = history.find((item) => item.run_id === historyCompareB);
 
   return (
     <div className="container">
@@ -869,6 +1005,17 @@ export default function App() {
               onChange={(event) => setWarmupTrials(Number(event.target.value))}
             />
           </label>
+          <label>
+            Recommendation Objective
+            <select
+              value={benchmarkObjective}
+              onChange={(event) => setBenchmarkObjective(event.target.value as BenchmarkObjective)}
+            >
+              <option value="lowest_latency">lowest_latency</option>
+              <option value="balanced">balanced</option>
+              <option value="reliability_first">reliability_first</option>
+            </select>
+          </label>
         </div>
         {stack === "vertex_api" && (
           <div className="grid">
@@ -910,7 +1057,8 @@ export default function App() {
       </section>
 
       <section className="card">
-        <h2>Mode Selection (Checkboxes)</h2>
+        <h2>Mode Selection</h2>
+        {stackCapabilities.note && <p className="warn">{stackCapabilities.note}</p>}
         <div className="checkboxes">
           <label>
             <input
@@ -924,27 +1072,29 @@ export default function App() {
             <input
               type="checkbox"
               checked={modeSelection.thinking}
+              disabled={!stackCapabilities.thinking}
               onChange={(event) => updateMode("thinking", event.target.checked)}
             />
             Thinking
           </label>
           <label>
-            <input
-              type="checkbox"
-              checked={modeSelection.implicit_cache}
-              onChange={(event) => updateMode("implicit_cache", event.target.checked)}
-            />
-            Implicit Cache
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={modeSelection.explicit_cache}
-              onChange={(event) => updateMode("explicit_cache", event.target.checked)}
-            />
-            Explicit Cache
+            Cache Intent
+            <select
+              value={cacheIntent}
+              onChange={(event) => updateCacheIntent(event.target.value as CacheIntent)}
+            >
+              <option value="none">none</option>
+              <option value="implicit_reuse">implicit_reuse</option>
+              <option value="explicit_cache" disabled={!stackCapabilities.explicitCache}>
+                explicit_cache
+              </option>
+            </select>
           </label>
         </div>
+        <p className="muted">
+          Current mode: {modeSelection.streaming ? "streaming" : "non_streaming"} | thinking=
+          {String(modeSelection.thinking)} | cache={cacheIntent}
+        </p>
       </section>
 
       <section className="card">
@@ -1188,6 +1338,16 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+              {optimizationResult.trace.length > 0 && (
+                <>
+                  <h3>Optimization Trace</h3>
+                  <ul>
+                    {optimizationResult.trace.map((item, idx) => (
+                      <li key={`opt-trace-${idx}-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </>
           )}
           {showVariantCode && !optimizationResult && (
@@ -1243,8 +1403,101 @@ export default function App() {
             <strong>Best Scenario:</strong> {result.recommendation.best_scenario_id ?? "n/a"}
           </p>
           <p>
+            <strong>Objective:</strong> {result.recommendation.objective} | <strong>Confidence:</strong>{" "}
+            {result.recommendation.confidence} | <strong>Reliability Score:</strong>{" "}
+            {result.recommendation.reliability_score.toFixed(3)}
+          </p>
+          <p>
             <strong>Recommendation:</strong> {result.recommendation.rationale}
           </p>
+          <div className="actions">
+            <button type="button" onClick={applyRecommendedSettings}>
+              Apply Recommended Settings
+            </button>
+          </div>
+          {lastOptimizeBenchmarkTemplateBefore &&
+            lastOptimizeBenchmarkTemplateAfter &&
+            lastOptimizeBenchmarkTemplateBefore !== lastOptimizeBenchmarkTemplateAfter && (
+              <div className="preview">
+                <strong>Optimize + Benchmark used an updated template.</strong>
+                <p className="muted">
+                  Previous: {lastOptimizeBenchmarkTemplateBefore.slice(0, 180)}
+                  {lastOptimizeBenchmarkTemplateBefore.length > 180 ? "..." : ""}
+                </p>
+                <p className="muted">
+                  Winner: {lastOptimizeBenchmarkTemplateAfter.slice(0, 180)}
+                  {lastOptimizeBenchmarkTemplateAfter.length > 180 ? "..." : ""}
+                </p>
+              </div>
+            )}
+
+          {bestRankedScenario && (
+            <div className="preview">
+              <h3>Why This Won</h3>
+              <p className="muted">
+                Score {bestRankedScenario.score.toFixed(4)} with TTFT P50{" "}
+                {bestRankedScenario.ttft_p50_s?.toFixed(3) ?? "n/a"}s and success rate{" "}
+                {(bestRankedScenario.success_rate * 100).toFixed(1)}%.
+              </p>
+              {runnerUpScenario && (
+                <p className="muted">
+                  Runner-up delta: TTFT P50{" "}
+                  {(
+                    (runnerUpScenario.ttft_p50_s ?? 0) - (bestRankedScenario.ttft_p50_s ?? 0)
+                  ).toFixed(3)}
+                  s, success rate{" "}
+                  {((bestRankedScenario.success_rate - runnerUpScenario.success_rate) * 100).toFixed(1)}%.
+                </p>
+              )}
+            </div>
+          )}
+
+          {result.recommendation.ranked_scenarios.length > 0 && (
+            <>
+              <h3>Ranked Eligible Scenarios</h3>
+              <div className="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Scenario</th>
+                      <th>Score</th>
+                      <th>TTFT P50</th>
+                      <th>TTFT P95</th>
+                      <th>E2E P50</th>
+                      <th>Success Rate</th>
+                      <th>Error Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.recommendation.ranked_scenarios.map((row) => (
+                      <tr key={`ranked-${row.scenario_id}`}>
+                        <td>{row.scenario_id}</td>
+                        <td>{row.score.toFixed(4)}</td>
+                        <td>{row.ttft_p50_s?.toFixed(3) ?? "n/a"}</td>
+                        <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
+                        <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
+                        <td>{(row.success_rate * 100).toFixed(1)}%</td>
+                        <td>{(row.error_rate * 100).toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {result.recommendation.disqualified_scenarios.length > 0 && (
+            <>
+              <h3>Disqualified Scenarios</h3>
+              <ul>
+                {result.recommendation.disqualified_scenarios.map((item) => (
+                  <li key={`dq-${item.scenario_id}`}>
+                    {item.scenario_id}: {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           <h3>Alternatives</h3>
           <ul>
@@ -1259,7 +1512,19 @@ export default function App() {
               <thead>
                 <tr>
                   <th>Scenario</th>
+                  <th>Status</th>
+                  <th>Stack</th>
+                  <th>Model</th>
+                  <th>Mode</th>
+                  <th>Thinking</th>
+                  <th>Cache</th>
+                  <th>Prompt Type</th>
+                  <th>OK</th>
+                  <th>Unsupported</th>
+                  <th>Errors</th>
+                  <th>Samples</th>
                   <th>TTFT P50</th>
+                  <th>TTFT P95</th>
                   <th>E2E P50</th>
                   <th>TPS Avg</th>
                   <th>Notes</th>
@@ -1267,9 +1532,30 @@ export default function App() {
               </thead>
               <tbody>
                 {result.summaries.map((row) => (
-                  <tr key={row.scenario_id}>
+                  <tr
+                    key={row.scenario_id}
+                    className={
+                      highlightedScenarioId === row.scenario_id
+                        ? "row-highlight"
+                        : `row-status-${scenarioStatus(row)}`
+                    }
+                  >
                     <td>{row.scenario_id}</td>
+                    <td>
+                      <span className={`badge badge-${scenarioStatus(row)}`}>{scenarioStatus(row)}</span>
+                    </td>
+                    <td>{row.stack}</td>
+                    <td>{row.model}</td>
+                    <td>{row.mode}</td>
+                    <td>{String(row.thinking)}</td>
+                    <td>{row.cache_strategy}</td>
+                    <td>{row.prompt_type}</td>
+                    <td>{row.ok_count}</td>
+                    <td>{row.unsupported_count}</td>
+                    <td>{row.error_count}</td>
+                    <td>{row.samples}</td>
                     <td>{row.ttft_p50_s?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.tokens_per_s_avg?.toFixed(2) ?? "n/a"}</td>
                     <td>{row.note ?? "ok"}</td>
@@ -1278,6 +1564,19 @@ export default function App() {
               </tbody>
             </table>
           </div>
+
+          {Object.keys(result.artifacts).length > 0 && (
+            <div className="preview">
+              <h3>Artifacts</h3>
+              <ul>
+                {Object.entries(result.artifacts).map(([key, value]) => (
+                  <li key={`artifact-${key}`}>
+                    <strong>{key}:</strong> {value}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <h3>Agent Trace</h3>
           <ul>
@@ -1298,27 +1597,109 @@ export default function App() {
         {history.length === 0 ? (
           <p className="muted">No run history yet.</p>
         ) : (
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>Saved At</th>
-                  <th>Run ID</th>
-                  <th>Best Scenario</th>
-                  <th>Summaries</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((item) => (
-                  <tr key={`${item.saved_at}-${item.run_id}`}>
-                    <td>{item.saved_at}</td>
-                    <td>{item.run_id}</td>
-                    <td>{item.best_scenario_id ?? "n/a"}</td>
-                    <td>{item.summaries_count}</td>
+          <div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Saved At</th>
+                    <th>Run ID</th>
+                    <th>Best Scenario</th>
+                    <th>Summaries</th>
+                    <th>Request Snapshot</th>
+                    <th>Artifacts</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {history.map((item) => (
+                    <tr key={`${item.saved_at}-${item.run_id}`}>
+                      <td>{item.saved_at}</td>
+                      <td>{item.run_id}</td>
+                      <td>{item.best_scenario_id ?? "n/a"}</td>
+                      <td>{item.summaries_count}</td>
+                      <td>
+                        <details>
+                          <summary>view</summary>
+                          <pre className="code-block">{JSON.stringify(item.request, null, 2)}</pre>
+                        </details>
+                      </td>
+                      <td>
+                        <details>
+                          <summary>view</summary>
+                          <pre className="code-block">{JSON.stringify(item.artifacts, null, 2)}</pre>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Compare Runs</h3>
+            <div className="grid">
+              <label>
+                Run A
+                <select value={historyCompareA} onChange={(event) => setHistoryCompareA(event.target.value)}>
+                  <option value="">Select run</option>
+                  {history.map((item) => (
+                    <option key={`a-${item.run_id}`} value={item.run_id}>
+                      {item.run_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Run B
+                <select value={historyCompareB} onChange={(event) => setHistoryCompareB(event.target.value)}>
+                  <option value="">Select run</option>
+                  {history.map((item) => (
+                    <option key={`b-${item.run_id}`} value={item.run_id}>
+                      {item.run_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {historyA && historyB && (
+              <div className="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>Run A</th>
+                      <th>Run B</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>best_scenario_id</td>
+                      <td>{historyA.best_scenario_id ?? "n/a"}</td>
+                      <td>{historyB.best_scenario_id ?? "n/a"}</td>
+                    </tr>
+                    <tr>
+                      <td>stack</td>
+                      <td>{String(historyA.request.stacks ?? "n/a")}</td>
+                      <td>{String(historyB.request.stacks ?? "n/a")}</td>
+                    </tr>
+                    <tr>
+                      <td>model</td>
+                      <td>{String(historyA.request.models ?? "n/a")}</td>
+                      <td>{String(historyB.request.models ?? "n/a")}</td>
+                    </tr>
+                    <tr>
+                      <td>mode_selection</td>
+                      <td>{JSON.stringify(historyA.request.mode_selection ?? {})}</td>
+                      <td>{JSON.stringify(historyB.request.mode_selection ?? {})}</td>
+                    </tr>
+                    <tr>
+                      <td>recommendation_objective</td>
+                      <td>{String(historyA.request.recommendation_objective ?? "lowest_latency")}</td>
+                      <td>{String(historyB.request.recommendation_objective ?? "lowest_latency")}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </section>

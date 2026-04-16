@@ -26,6 +26,7 @@ export type BenchmarkRequest = {
   prompt_variables: Record<string, string>;
   vertex_config?: VertexConfig;
   include_long_context: boolean;
+  recommendation_objective?: "lowest_latency" | "balanced" | "reliability_first";
 };
 
 export type ScenarioSummary = {
@@ -55,6 +56,24 @@ export type BenchmarkResponse = {
     best_scenario_id: string | null;
     rationale: string;
     alternatives: string[];
+    ranked_scenarios: {
+      scenario_id: string;
+      score: number;
+      ttft_p50_s: number | null;
+      ttft_p95_s: number | null;
+      e2e_p50_s: number | null;
+      tokens_per_s_avg: number | null;
+      success_rate: number;
+      error_rate: number;
+      unsupported_rate: number;
+    }[];
+    disqualified_scenarios: {
+      scenario_id: string;
+      reason: string;
+    }[];
+    reliability_score: number;
+    confidence: string;
+    objective: string;
   };
   reasoning_trace: string[];
   artifacts: Record<string, string>;

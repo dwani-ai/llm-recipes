@@ -29,6 +29,26 @@ Standalone product for benchmarking Gemini response modes with:
 - Benchmark run artifacts and recommendation report
 - Run history endpoint and UI table for recent runs
 
+## Stack and Mode Decision Cheat-Sheet
+
+Use this as your default starting point before running the full benchmark matrix.
+
+- **Need fastest perceived TTFT for interactive UX**
+  - Start with `streaming=true`, `thinking=false`, `cache=none`.
+  - If prompts repeat a large stable prefix, retest with `cache=implicit_reuse` and `cache=explicit_cache`.
+- **Need highest quality/reasoning depth**
+  - Start with `streaming=false`, `thinking=true`, `cache=implicit_reuse` for repeated context.
+- **Need balanced latency + reliability**
+  - Start with objective `balanced`, `streaming=true`, `thinking=false`, `cache=implicit_reuse`.
+- **Need reliability first (production defaults)**
+  - Use objective `reliability_first` and prioritize scenarios with high `ok_count/samples` and low errors.
+
+Stack selection:
+
+- `google_genai`: best feature coverage for thinking + explicit cache.
+- `openai_compat`: easiest OpenAI-style integration, but limited explicit cache/thinking control.
+- `vertex_api`: best for Vertex endpoint integration and enterprise routing; feature support depends on endpoint path/capability.
+
 ## Prompt and Data Cookbook by Use Case
 
 Use this section to quickly choose a mode profile and copy sample `prompt_template` + variables into the UI.
@@ -263,6 +283,28 @@ Use {{dataset_name}} to produce a detailed compliance readiness assessment for {
 - `openai_compat`: good for baseline chat-style calls; explicit cache and thinking controls may be limited.
 - `vertex_api`: supports production endpoint integration; explicit cache and thinking controls depend on endpoint capability and API path.
 
+## How Recommendation Is Computed
+
+For every benchmark run, the backend:
+
+1. Computes scenario metrics (`ttft_p50_s`, `ttft_p95_s`, `e2e_p50_s`, success/error counts).
+2. Applies an eligibility gate (minimum success quality, required TTFT metric).
+3. Scores eligible scenarios with objective-aware weights:
+   - `lowest_latency`: mostly TTFT-focused.
+   - `balanced`: TTFT + tail latency + E2E + reliability.
+   - `reliability_first`: reliability-heavy with latency as secondary.
+4. Returns:
+   - `best_scenario_id`
+   - `ranked_scenarios`
+   - `disqualified_scenarios` with reasons
+   - `reliability_score` and confidence label
+
+Interpretation guide:
+
+- Prefer rows labeled `eligible`.
+- Treat `unstable`/`disqualified` rows as non-default candidates until failure causes are fixed.
+- Compare winner vs runner-up before rollout to avoid overfitting to one run.
+
 ## Project Layout
 
 - `frontend/` - React + Vite app
@@ -310,7 +352,7 @@ For `vertex_api`, send `vertex_config` with:
 ## Run with Docker Compose
 
 ```bash
-cd /home/sachin/code/llm-recipes/products/gemini-benchmark-studio
+cd products/gemini-benchmark-studio
 docker compose up --build
 ```
 
@@ -323,6 +365,40 @@ Stop services:
 
 ```bash
 docker compose down
+```
+
+## Validation Playbook
+
+Run this sequence after setup:
+
+1. `GET /api/health` should return `{"status":"ok"}`.
+2. `GET /api/benchmark/default-modes` should return defaults.
+3. `POST /api/prompt/preview` with your template/variables.
+4. `POST /api/prompt/token-count` for mode-aware token economics.
+5. `POST /api/benchmark/run` with `trials=3` for a quick smoke benchmark.
+6. Open UI results and confirm:
+   - ranked scenarios are present
+   - disqualified reasons are understandable
+   - best scenario can be applied to form controls.
+
+## Run Tests
+
+Backend:
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pytest tests
+```
+
+Frontend build check:
+
+```bash
+cd frontend
+npm install
+npm run build
 ```
 
 ## Notes
