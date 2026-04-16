@@ -29,6 +29,145 @@ type CodeVariation = {
   thinking: boolean;
   cacheStrategy: CacheStrategy;
 };
+type SampleUseCase = {
+  id: string;
+  title: string;
+  promptTemplate: string;
+  variables: Record<string, string>;
+  recommended: {
+    stack: "google_genai" | "openai_compat" | "vertex_api";
+    model: string;
+    modeSelection: ModeSelection;
+  };
+};
+
+const SAMPLE_USE_CASES: SampleUseCase[] = [
+  {
+    id: "support_streaming_none",
+    title: "Support Ops - Streaming + No Cache",
+    promptTemplate: "Analyze {{dataset_name}} and provide a concise action plan for {{goal}} in 4 bullets.",
+    variables: {
+      dataset_name: "customer_support_tickets_q2",
+      goal: "reduce repeat escalation rate",
+      data_context: "Ticket logs include category, sentiment score, and resolution status for 45,000 interactions.",
+    },
+    recommended: {
+      stack: "google_genai",
+      model: "gemini-2.5-flash",
+      modeSelection: { streaming: true, thinking: false, implicit_cache: false, explicit_cache: false },
+    },
+  },
+  {
+    id: "fraud_streaming_thinking",
+    title: "Fraud Analysis - Streaming + Thinking",
+    promptTemplate:
+      "For {{dataset_name}}, reason step-by-step and propose a prioritized strategy for {{goal}} with assumptions and risks.",
+    variables: {
+      dataset_name: "fraud_detection_alerts_weekly",
+      goal: "cut false positives while preserving recall",
+      data_context: "Alert data includes score bands, investigator outcomes, and merchant risk cohorts.",
+    },
+    recommended: {
+      stack: "google_genai",
+      model: "gemini-2.5-flash",
+      modeSelection: { streaming: true, thinking: true, implicit_cache: false, explicit_cache: false },
+    },
+  },
+  {
+    id: "incident_streaming_implicit",
+    title: "Platform Incidents - Streaming + Implicit Cache",
+    promptTemplate: "Using the context for {{dataset_name}}, provide the top 5 operational fixes for {{goal}}.",
+    variables: {
+      dataset_name: "incident_postmortems_platform_ops",
+      goal: "reduce mean time to recovery",
+      data_context: "Postmortems cover incident timeline, blast radius, root cause class, and mitigation actions.",
+    },
+    recommended: {
+      stack: "google_genai",
+      model: "gemini-2.5-flash",
+      modeSelection: { streaming: true, thinking: false, implicit_cache: true, explicit_cache: false },
+    },
+  },
+  {
+    id: "docs_streaming_explicit",
+    title: "Documentation QA - Streaming + Explicit Cache",
+    promptTemplate:
+      "From {{dataset_name}}, return concise recommendations for {{goal}} with one metric per recommendation.",
+    variables: {
+      dataset_name: "product_docs_and_runbooks",
+      goal: "improve support deflection rate",
+      data_context:
+        "Extensive static corpus: product docs, onboarding guides, troubleshooting runbooks, and changelog notes.",
+    },
+    recommended: {
+      stack: "google_genai",
+      model: "gemini-2.5-flash",
+      modeSelection: { streaming: true, thinking: false, implicit_cache: false, explicit_cache: true },
+    },
+  },
+  {
+    id: "marketing_batch_none",
+    title: "Marketing Weekly - Non-Streaming + No Cache",
+    promptTemplate: "Summarize {{dataset_name}} and produce a compact action checklist for {{goal}}.",
+    variables: {
+      dataset_name: "weekly_marketing_performance",
+      goal: "improve paid channel efficiency",
+      data_context: "Campaign data contains spend, conversion funnel metrics, and region-level attribution reports.",
+    },
+    recommended: {
+      stack: "openai_compat",
+      model: "gemini-2.5-flash",
+      modeSelection: { streaming: false, thinking: false, implicit_cache: false, explicit_cache: false },
+    },
+  },
+  {
+    id: "finance_batch_thinking",
+    title: "Finance Close - Non-Streaming + Thinking",
+    promptTemplate:
+      "For {{dataset_name}}, provide a reasoned diagnosis and remediation plan for {{goal}}, including assumptions.",
+    variables: {
+      dataset_name: "finance_close_cycle_exceptions",
+      goal: "reduce month-end reconciliation delays",
+      data_context: "Exception logs include ledger mismatches, owner teams, aging buckets, and resolution patterns.",
+    },
+    recommended: {
+      stack: "google_genai",
+      model: "gemini-2.5-pro",
+      modeSelection: { streaming: false, thinking: true, implicit_cache: false, explicit_cache: false },
+    },
+  },
+  {
+    id: "kb_batch_implicit",
+    title: "Knowledge Base Audit - Non-Streaming + Implicit Cache",
+    promptTemplate: "Using {{dataset_name}}, generate a deterministic summary and recommendations for {{goal}}.",
+    variables: {
+      dataset_name: "knowledge_base_quality_audit",
+      goal: "identify stale articles and ownership gaps",
+      data_context: "Audit snapshot includes article freshness, broken links, unresolved feedback, and owner metadata.",
+    },
+    recommended: {
+      stack: "vertex_api",
+      model: "gemini-2.5-flash",
+      modeSelection: { streaming: false, thinking: false, implicit_cache: true, explicit_cache: false },
+    },
+  },
+  {
+    id: "security_batch_explicit",
+    title: "Security Compliance - Non-Streaming + Explicit Cache",
+    promptTemplate:
+      "Use {{dataset_name}} to produce a detailed compliance readiness assessment for {{goal}} with phased remediation.",
+    variables: {
+      dataset_name: "security_control_evidence_repository",
+      goal: "prepare SOC2 gap-closure plan",
+      data_context: "Evidence repository contains policy docs, control test logs, auditor notes, and system ownership maps.",
+    },
+    recommended: {
+      stack: "google_genai",
+      model: "gemini-2.5-pro",
+      modeSelection: { streaming: false, thinking: true, implicit_cache: false, explicit_cache: true },
+    },
+  },
+];
 
 function toVariableMap(rows: PromptVarRow[]): Record<string, string> {
   const data: Record<string, string> = {};
@@ -52,6 +191,7 @@ export default function App() {
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
+  const [selectedUseCaseId, setSelectedUseCaseId] = useState("");
   const [optimizationObjective, setOptimizationObjective] =
     useState<"lowest_latency" | "highest_quality" | "balanced">("balanced");
   const [optimizationVariantCount, setOptimizationVariantCount] = useState(3);
@@ -128,6 +268,22 @@ export default function App() {
 
   function addVarRow() {
     setPromptVars((prev) => [...prev, { key: "", value: "" }]);
+  }
+
+  function applySampleUseCase() {
+    const sample = SAMPLE_USE_CASES.find((item) => item.id === selectedUseCaseId);
+    if (!sample) {
+      return;
+    }
+    setPromptTemplate(sample.promptTemplate);
+    setPromptVars(Object.entries(sample.variables).map(([key, value]) => ({ key, value })));
+    setStack(sample.recommended.stack);
+    setModel(sample.recommended.model);
+    setModeSelection(sample.recommended.modeSelection);
+    setPromptPreview("");
+    setPreviewMissing([]);
+    setExactTokenCount(null);
+    setTokenCountNote(null);
   }
 
   async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -653,6 +809,22 @@ export default function App() {
 
       <section className="card">
         <h2>Prompt Template for Your Data</h2>
+        <div className="actions">
+          <label>
+            Use Case Examples
+            <select value={selectedUseCaseId} onChange={(event) => setSelectedUseCaseId(event.target.value)}>
+              <option value="">Select sample prompt + data</option>
+              {SAMPLE_USE_CASES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={applySampleUseCase} disabled={!selectedUseCaseId}>
+            Apply Example
+          </button>
+        </div>
         <label>
           Prompt Template
           <textarea
