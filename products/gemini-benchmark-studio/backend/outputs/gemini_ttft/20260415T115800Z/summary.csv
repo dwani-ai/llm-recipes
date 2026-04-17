@@ -1,5 +1,0 @@
-scenario_id,stack,model,mode,thinking,cache_strategy,prompt_type,samples,ok_count,unsupported_count,error_count,ttft_p50_s,ttft_p95_s,e2e_p50_s,tokens_per_s_avg,note
-google_genai|gemini-2.5-flash|streaming|thinking_False|cache_implicit_reuse|short_prompt,google_genai,gemini-2.5-flash,streaming,False,implicit_reuse,short_prompt,10,10,0,0,1.1849887224998383,1.448228586200821,1.7248948800006474,47.92660610642652,
-google_genai|gemini-2.5-flash|streaming|thinking_False|cache_none|long_context,google_genai,gemini-2.5-flash,streaming,False,none,long_context,10,10,0,0,1.2253652219987998,1.5791620406505897,1.6451566814994294,52.15631551568615,
-google_genai|gemini-2.5-flash|streaming|thinking_False|cache_none|short_prompt,google_genai,gemini-2.5-flash,streaming,False,none,short_prompt,10,10,0,0,1.3857684670001618,1.5537995047496223,1.843481027000962,47.38542691709847,
-google_genai|gemini-2.5-flash|streaming|thinking_False|cache_implicit_reuse|long_context,google_genai,gemini-2.5-flash,streaming,False,implicit_reuse,long_context,10,10,0,0,1.473464561999208,2.353262827550133,1.945141683499969,42.63891418857888,
