@@ -4,7 +4,7 @@ import json
 import statistics
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -46,6 +46,7 @@ class Scenario:
     model: str
     mode: str
     thinking: bool
+    thinking_token_budget: int
     cache_strategy: str
     prompt_type: str
     trials: int
@@ -58,7 +59,7 @@ class Scenario:
     def scenario_id(self) -> str:
         return (
             f"{self.stack}|{self.model}|{self.mode}|thinking_{self.thinking}|"
-            f"cache_{self.cache_strategy}|{self.prompt_type}"
+            f"thinking_budget_{self.thinking_token_budget}|cache_{self.cache_strategy}|{self.prompt_type}"
         )
 
 
@@ -79,7 +80,7 @@ class GoogleGenAIAdapter:
             "temperature": scenario.temperature,
         }
         if scenario.thinking:
-            cfg["thinking_config"] = {"thinking_budget": 1024}
+            cfg["thinking_config"] = {"thinking_budget": scenario.thinking_token_budget}
         else:
             cfg["thinking_config"] = {"thinking_budget": 0}
         if explicit_cache_name:
@@ -111,6 +112,25 @@ class GoogleGenAIAdapter:
         self.cache_by_key[key] = cache_name
         return cache_name, None
 
+    def _extract_final_output_text(self, chunk: Any) -> str:
+        candidates = getattr(chunk, "candidates", None) or []
+        saw_structured_parts = False
+        visible_parts: List[str] = []
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) or []
+            for part in parts:
+                text = getattr(part, "text", None)
+                if text is None:
+                    continue
+                saw_structured_parts = True
+                if getattr(part, "thought", False):
+                    continue
+                visible_parts.append(text)
+        if saw_structured_parts:
+            return normalize_text(visible_parts)
+        return getattr(chunk, "text", "") or ""
+
     def run_once(self, scenario: Scenario, prompt_cfg: Dict[str, str]) -> Dict[str, Any]:
         explicit_cache_name = None
         if scenario.cache_strategy == "explicit_cache":
@@ -127,7 +147,7 @@ class GoogleGenAIAdapter:
 
     def _streaming(self, scenario: Scenario, contents: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
         start = time.perf_counter()
-        first_chunk: Optional[float] = None
+        first_final_output_chunk: Optional[float] = None
         parts: List[str] = []
         try:
             stream = self.client.models.generate_content_stream(
@@ -136,15 +156,20 @@ class GoogleGenAIAdapter:
                 config=config,
             )
             for chunk in stream:
-                if first_chunk is None:
-                    first_chunk = time.perf_counter()
-                parts.append(getattr(chunk, "text", "") or "")
+                text_piece = (
+                    self._extract_final_output_text(chunk)
+                    if scenario.thinking
+                    else (getattr(chunk, "text", "") or "")
+                )
+                if first_final_output_chunk is None and text_piece.strip():
+                    first_final_output_chunk = time.perf_counter()
+                parts.append(text_piece)
             end = time.perf_counter()
         except Exception as exc:  # pragma: no cover
             return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
         text = normalize_text(parts)
         total = end - start
-        ttft = (first_chunk - start) if first_chunk else total
+        ttft = (first_final_output_chunk - start) if first_final_output_chunk else total
         tokens = estimate_tokens(text)
         return {
             "status": "ok",
@@ -152,6 +177,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "first_final_output_token",
         }
 
     def _non_streaming(self, scenario: Scenario, contents: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -174,6 +200,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "response_complete_non_streaming",
         }
 
 
@@ -229,6 +256,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "first_output_token",
         }
 
     def _non_streaming(self, scenario: Scenario, messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -254,6 +282,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "ttft_definition": "response_complete_non_streaming",
         }
 
 
@@ -319,6 +348,7 @@ class BenchmarkRunner:
                     max_output_tokens=request.max_output_tokens,
                     temperature=request.temperature,
                     timeout_s=request.timeout_s,
+                    thinking_token_budget=request.thinking_token_budget,
                 )
             )
         return scenarios
@@ -378,6 +408,7 @@ class BenchmarkRunner:
                     "model": first["model"],
                     "mode": first["mode"],
                     "thinking": first["thinking"],
+                    "thinking_token_budget": first["thinking_token_budget"],
                     "cache_strategy": first["cache_strategy"],
                     "prompt_type": first["prompt_type"],
                     "samples": len(items),
@@ -388,6 +419,7 @@ class BenchmarkRunner:
                     "ttft_p95_s": percentile(ttfts, 95),
                     "e2e_p50_s": percentile(e2es, 50),
                     "tokens_per_s_avg": statistics.fmean(tps) if tps else None,
+                    "ttft_definition": first.get("ttft_definition", "first_output_token"),
                     "note": unsupported[0] if unsupported else (errors[0] if errors else None),
                 }
             )
@@ -416,6 +448,19 @@ class BenchmarkRunner:
             tps = f"{row['tokens_per_s_avg']:.2f}" if row["tokens_per_s_avg"] is not None else "n/a"
             lines.append(f"| {idx} | {row['scenario_id']} | {ttft} | {e2e} | {tps} | {note} |")
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _scheduled_slots(self, request: BenchmarkRequest, total_iterations: int) -> List[datetime]:
+        if not request.schedule_enabled or total_iterations <= 0:
+            return []
+        start_at = request.schedule_start_at or datetime.now(tz=timezone.utc)
+        if start_at.tzinfo is None:
+            start_at = start_at.replace(tzinfo=timezone.utc)
+        start_at = start_at.astimezone(timezone.utc)
+        window_seconds = request.schedule_window_minutes * 60
+        if total_iterations == 1:
+            return [start_at]
+        step_seconds = window_seconds / float(total_iterations - 1)
+        return [start_at + timedelta(seconds=(idx * step_seconds)) for idx in range(total_iterations)]
 
     def run(self, request: BenchmarkRequest, rendered_prompt: str) -> Dict[str, Any]:
         run_id = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -461,6 +506,7 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
                         "iteration": 0,
@@ -470,6 +516,8 @@ class BenchmarkRunner:
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
+                        "ttft_definition": "first_output_token",
+                        "scheduled_for": None,
                         "reason": f"unsupported_stack:{scenario.stack}",
                         "error": None,
                     }
@@ -485,6 +533,7 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
                         "iteration": 0,
@@ -494,23 +543,35 @@ class BenchmarkRunner:
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
+                        "ttft_definition": "first_output_token",
+                        "scheduled_for": None,
                         "reason": None,
                         "error": adapter["init_error"],
                     }
                 )
                 continue
             prompt_cfg = prompts[scenario.prompt_type]
-            for iteration in range(scenario.warmup_trials + scenario.trials):
+            total_iterations = scenario.warmup_trials + scenario.trials
+            scheduled_slots = self._scheduled_slots(request, total_iterations)
+            for iteration in range(total_iterations):
                 is_warmup = iteration < scenario.warmup_trials
+                scheduled_for = scheduled_slots[iteration] if scheduled_slots else None
+                if scheduled_for is not None:
+                    now_dt = datetime.now(tz=timezone.utc)
+                    wait_s = (scheduled_for - now_dt).total_seconds()
+                    if wait_s > 0:
+                        time.sleep(wait_s)
+                started_at = utc_now_iso()
                 payload = adapter.run_once(scenario, prompt_cfg)
                 raw_rows.append(
                     {
-                        "started_at": utc_now_iso(),
+                        "started_at": started_at,
                         "scenario_id": scenario.scenario_id,
                         "stack": scenario.stack,
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
                         "iteration": iteration,
@@ -520,6 +581,8 @@ class BenchmarkRunner:
                         "e2e_s": payload.get("e2e_s"),
                         "output_tokens": payload.get("output_tokens"),
                         "tokens_per_s": payload.get("tokens_per_s"),
+                        "ttft_definition": payload.get("ttft_definition", "first_output_token"),
+                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": payload.get("reason"),
                         "error": payload.get("error"),
                     }
@@ -538,15 +601,26 @@ class BenchmarkRunner:
         report_md = run_dir / "report.md"
         self._write_report(report_md, summaries)
 
+        artifacts: Dict[str, str] = {
+            "output_root": str(run_dir),
+            "raw_jsonl": str(raw_path),
+            "summary_json": str(summary_json),
+            "summary_csv": str(summary_csv),
+            "report_md": str(report_md),
+        }
+        if request.schedule_enabled:
+            start_at = request.schedule_start_at or datetime.now(tz=timezone.utc)
+            if start_at.tzinfo is None:
+                start_at = start_at.replace(tzinfo=timezone.utc)
+            start_at = start_at.astimezone(timezone.utc)
+            artifacts["schedule_window_start"] = start_at.isoformat()
+            artifacts["schedule_window_end"] = (
+                start_at + timedelta(minutes=request.schedule_window_minutes)
+            ).isoformat()
+
         return {
             "run_id": run_id,
             "summaries": summaries,
-            "artifacts": {
-                "output_root": str(run_dir),
-                "raw_jsonl": str(raw_path),
-                "summary_json": str(summary_json),
-                "summary_csv": str(summary_csv),
-                "report_md": str(report_md),
-            },
+            "artifacts": artifacts,
         }
 

@@ -5,6 +5,7 @@ output.wav
 src/ollama
 pyautogenvenv/
 venv/
+node_modules/
 .venv_bench
 venv_2
 # Byte-compiled / optimized / DLL files

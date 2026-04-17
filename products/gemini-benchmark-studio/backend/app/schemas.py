@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -29,11 +30,27 @@ class PromptTokenCountRequest(BaseModel):
     template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     variables: Dict[str, str] = Field(default_factory=dict)
     vertex_config: Optional["VertexConfig"] = None
+    mode_selection: ModeSelection = Field(default_factory=ModeSelection)
+    include_long_context: bool = True
+    calls_for_savings: int = Field(default=10, ge=1, le=1000)
+
+
+class PromptTokenBreakdownItem(BaseModel):
+    prompt_type: str
+    strategy: str
+    baseline_request_tokens: int
+    request_tokens: int
+    cache_create_tokens: int = 0
+    first_call_total_tokens: int
+    subsequent_call_tokens: int
+    savings_vs_baseline_after_n_calls: int
 
 
 class PromptTokenCountResponse(BaseModel):
     rendered_prompt: str
     token_count: int
+    calls_for_savings: int
+    breakdown: List[PromptTokenBreakdownItem] = Field(default_factory=list)
     note: Optional[str] = None
 
 
@@ -97,10 +114,17 @@ class BenchmarkRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     timeout_s: int = Field(default=90, ge=10, le=300)
     mode_selection: ModeSelection = Field(default_factory=ModeSelection)
+    thinking_token_budget: int = Field(default=1024, ge=0, le=8192)
     prompt_template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     prompt_variables: Dict[str, str] = Field(default_factory=dict)
     vertex_config: Optional[VertexConfig] = None
     include_long_context: bool = True
+    recommendation_objective: Literal["lowest_latency", "balanced", "reliability_first"] = Field(
+        default="lowest_latency"
+    )
+    schedule_enabled: bool = False
+    schedule_start_at: Optional[datetime] = None
+    schedule_window_minutes: int = Field(default=15, ge=1, le=60)
 
 
 class ScenarioSummary(BaseModel):
@@ -109,6 +133,7 @@ class ScenarioSummary(BaseModel):
     model: str
     mode: str
     thinking: bool
+    thinking_token_budget: int
     cache_strategy: str
     prompt_type: str
     samples: int
@@ -119,6 +144,7 @@ class ScenarioSummary(BaseModel):
     ttft_p95_s: Optional[float] = None
     e2e_p50_s: Optional[float] = None
     tokens_per_s_avg: Optional[float] = None
+    ttft_definition: str = "first_final_output_token"
     note: Optional[str] = None
 
 
@@ -126,6 +152,11 @@ class BenchmarkRecommendation(BaseModel):
     best_scenario_id: Optional[str] = None
     rationale: str
     alternatives: List[str] = Field(default_factory=list)
+    ranked_scenarios: List[Dict[str, Any]] = Field(default_factory=list)
+    disqualified_scenarios: List[Dict[str, str]] = Field(default_factory=list)
+    reliability_score: float = 0.0
+    confidence: str = "low"
+    objective: str = "lowest_latency"
 
 
 class BenchmarkResponse(BaseModel):

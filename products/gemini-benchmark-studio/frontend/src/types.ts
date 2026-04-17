@@ -22,10 +22,15 @@ export type BenchmarkRequest = {
   temperature: number;
   timeout_s: number;
   mode_selection: ModeSelection;
+  thinking_token_budget?: number;
   prompt_template: string;
   prompt_variables: Record<string, string>;
   vertex_config?: VertexConfig;
   include_long_context: boolean;
+  recommendation_objective?: "lowest_latency" | "balanced" | "reliability_first";
+  schedule_enabled?: boolean;
+  schedule_start_at?: string;
+  schedule_window_minutes?: number;
 };
 
 export type ScenarioSummary = {
@@ -34,6 +39,7 @@ export type ScenarioSummary = {
   model: string;
   mode: string;
   thinking: boolean;
+  thinking_token_budget: number;
   cache_strategy: string;
   prompt_type: string;
   samples: number;
@@ -44,6 +50,7 @@ export type ScenarioSummary = {
   ttft_p95_s: number | null;
   e2e_p50_s: number | null;
   tokens_per_s_avg: number | null;
+  ttft_definition: string;
   note: string | null;
 };
 
@@ -55,6 +62,24 @@ export type BenchmarkResponse = {
     best_scenario_id: string | null;
     rationale: string;
     alternatives: string[];
+    ranked_scenarios: {
+      scenario_id: string;
+      score: number;
+      ttft_p50_s: number | null;
+      ttft_p95_s: number | null;
+      e2e_p50_s: number | null;
+      tokens_per_s_avg: number | null;
+      success_rate: number;
+      error_rate: number;
+      unsupported_rate: number;
+    }[];
+    disqualified_scenarios: {
+      scenario_id: string;
+      reason: string;
+    }[];
+    reliability_score: number;
+    confidence: string;
+    objective: string;
   };
   reasoning_trace: string[];
   artifacts: Record<string, string>;
@@ -75,6 +100,7 @@ export type DefaultModesResponse = {
     model: string;
     streaming: boolean;
     thinking: boolean;
+    thinking_token_budget: number;
     implicit_cache: boolean;
     explicit_cache: boolean;
     trials: number;
@@ -127,11 +153,27 @@ export type PromptTokenCountRequest = {
   template: string;
   variables: Record<string, string>;
   vertex_config?: VertexConfig;
+  mode_selection: ModeSelection;
+  include_long_context: boolean;
+  calls_for_savings: number;
+};
+
+export type PromptTokenBreakdownItem = {
+  prompt_type: string;
+  strategy: string;
+  baseline_request_tokens: number;
+  request_tokens: number;
+  cache_create_tokens: number;
+  first_call_total_tokens: number;
+  subsequent_call_tokens: number;
+  savings_vs_baseline_after_n_calls: number;
 };
 
 export type PromptTokenCountResponse = {
   rendered_prompt: string;
   token_count: number;
+  calls_for_savings: number;
+  breakdown: PromptTokenBreakdownItem[];
   note?: string | null;
 };
 
