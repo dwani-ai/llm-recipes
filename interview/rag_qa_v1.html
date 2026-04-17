@@ -1,0 +1,1158 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://slabstech.com/llm-recipes/interview/rag_qa_v1.html">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../images/dwani-favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Rag qa v1 - llm-recipes</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sample-rag-system-design-prompt" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../index.html" title="llm-recipes" class="md-header__button md-logo" aria-label="llm-recipes" data-md-component="logo">
+      
+  <img src="../images/dwani-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            llm-recipes
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Rag qa v1
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/slabstech/llm-recipes" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../index.html" class="md-tabs__link">
+        
+  
+  
+    
+  
+  home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../index.html" class="md-tabs__link">
+        
+  
+  
+    
+  
+  home
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="llm-recipes" class="md-nav__button md-logo" aria-label="llm-recipes" data-md-component="logo">
+      
+  <img src="../images/dwani-logo.png" alt="logo">
+
+    </a>
+    llm-recipes
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/slabstech/llm-recipes" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sample-rag-system-design-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample RAG system design prompt
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sample RAG system design prompt">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-requirements-to-give-the-candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core requirements to give the candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-you-expect-the-candidate-to-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What you expect the candidate to cover
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#optional-follow-up-twists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional follow-up twists
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-background-and-motivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General background and motivation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rag-concepts-and-system-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RAG concepts and system architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dense-sparse-and-hybrid-retrieval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dense, sparse, and hybrid retrieval
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-ranking-and-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-ranking and evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#llms-prompt-engineering-and-fine-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLMs, prompt engineering, and fine-tuning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentic-ai-reasoning-and-knowledge-graphs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agentic AI, reasoning, and knowledge graphs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-engineering-and-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend engineering and implementation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#collaboration-research-transfer-and-customer-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collaboration, research transfer, and customer projects
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#culture-language-and-working-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Culture, language, and working style
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-background-and-motivation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General background and motivation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rag-concepts-and-system-architecture_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RAG concepts and system architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dense-sparse-and-hybrid-retrieval_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dense, sparse, and hybrid retrieval
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-ranking-and-evaluation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-ranking and evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#llms-prompt-engineering-and-fine-tuning_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLMs, prompt engineering, and fine-tuning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentic-ai-reasoning-and-knowledge-graphs_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agentic AI, reasoning, and knowledge graphs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-engineering-and-implementation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend engineering and implementation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#collaboration-research-transfer-and-customer-projects_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collaboration, research transfer, and customer projects
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#culture-language-and-working-style_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Culture, language, and working style
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-background-and-motivation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General Background and Motivation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rag-concepts-and-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RAG Concepts and Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dense-sparse-and-hybrid-retrieval_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dense, Sparse, and Hybrid Retrieval
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-ranking-and-evaluation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-ranking and Evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#llms-prompt-engineering-fine-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLMs, Prompt Engineering, Fine-tuning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentic-ai-reasoning-knowledge-graphs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agentic AI, Reasoning, Knowledge Graphs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-engineering-and-implementation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend Engineering and Implementation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#collaboration-research-customer-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collaboration, Research, Customer Projects
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#culture-language-working-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Culture, Language, Working Style
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-rag-techniques" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced RAG Techniques
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentic-ai-and-knowledge-graphs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agentic AI and Knowledge Graphs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#production-and-evaluation-depth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Production and Evaluation Depth
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-and-research-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend and Research Integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/slabstech/llm-recipes/edit/master/docs/interview/rag_qa_v1.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+  <h1>Rag qa v1</h1>
+
+<p>Here is a sample system design question you can use for a RAG-focused interview. You can adapt the scale, constraints, or follow-ups depending on seniority.[6][9]</p>
+<h2 id="sample-rag-system-design-prompt">Sample RAG system design prompt</h2>
+<p>Design a Retrieval-Augmented Generation (RAG) system for an internal “AI knowledge assistant” that answers employees’ questions about company policies, product documentation, and troubleshooting guides in real time. The system should serve thousands of users concurrently, keep answers up to date as documents change, and return grounded, low‑latency responses.[9][6]</p>
+<h3 id="core-requirements-to-give-the-candidate">Core requirements to give the candidate</h3>
+<ul>
+<li>Support natural-language Q&amp;A over heterogeneous documents (PDFs, HTML, tickets, wikis) stored in multiple internal systems.  </li>
+<li>Average latency under 2 seconds at peak load of 100 QPS, with graceful degradation during traffic spikes.  </li>
+<li>Strong grounding: the assistant must cite sources and minimize hallucinations, and it should refuse to answer if relevant content is missing.  </li>
+</ul>
+<h3 id="what-you-expect-the-candidate-to-cover">What you expect the candidate to cover</h3>
+<ul>
+<li>High-level architecture: ingestion pipeline, chunking and enrichment, embedding and indexing, choice of vector/full-text/hybrid search, and orchestration layer.[8][9]</li>
+<li>Query-time flow: how the query is embedded, retrieved, re-ranked, combined with context, and passed to the LLM; prompt construction and safety/guardrail mechanisms.[7][6]</li>
+<li>Freshness and updates: how document changes, deletions, and new sources are detected and re-indexed without full reprocessing.[9]</li>
+<li>Scale and reliability: sharding or partitioning strategy for the index, caching (embeddings, retrieval results, and prompts), rate limiting, and fallbacks when the LLM or vector store is degraded.[10][6]</li>
+<li>Evaluation: offline metrics for retrieval quality and end-to-end answer quality, plus online monitoring (latency, cost, hallucination or “no-answer” rates, feedback loops).[5][9]</li>
+</ul>
+<h3 id="optional-follow-up-twists">Optional follow-up twists</h3>
+<ul>
+<li>Ask how they would extend the design to support multi-step “agentic” workflows where the assistant may perform multiple retrievals or tool calls before answering.[7][8]</li>
+<li>Ask how they would adapt the design for strict compliance/PII constraints, including access control-aware retrieval and data residency.[9]</li>
+</ul>
+<p><a href="https://www.datacamp.com/blog/rag-interview-questions">1</a>
+<a href="https://yardstick.team/work-samples/essential-work-sample-exercises-for-evaluating-rag-system-implementation-skills">2</a>
+<a href="https://www.evidentlyai.com/blog/rag-examples">3</a>
+<a href="https://www.projectpro.io/article/rag-interview-questions-and-answers/1065">4</a>
+<a href="https://galileo.ai/blog/mastering-rag-how-to-architect-an-enterprise-rag-system">5</a>
+<a href="https://www.systemdesignhandbook.com/guides/generative-ai-system-design-interview/">6</a>
+<a href="https://manishmazumder5.substack.com/p/rag-architecture-explained-ml-system">7</a>
+<a href="https://humanloop.com/blog/rag-architectures">8</a>
+<a href="https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/rag/rag-solution-design-and-evaluation-guide">9</a>
+<a href="https://dev.to/mrzaizai2k/how-i-aced-my-llm-interview-building-a-rag-chatbot-2p6f">10</a></p>
+<p>Here are concise sample points a strong candidate could cover for each question.</p>
+<h2 id="general-background-and-motivation">General background and motivation</h2>
+<ol>
+<li>Relevant background: 2–5 years working on backend services involving search, NLP, or ML-powered features; experience deploying services in production (APIs, monitoring, CI/CD). Motivation: interest in applied AI for information access, wanting to work at the intersection of classic IR (Lucene/Elasticsearch) and modern LLM/RAG in real customer environments like industry and public sector.[1][2]</li>
+<li>Example project: Backend service that powers semantic search over internal documentation using Elasticsearch plus an embedding-based dense index. Technologies: Python or Java, Elasticsearch/OpenSearch, a vector database or ANN library, and an LLM API. Impact: reduced support ticket volume, faster information discovery for users.[3][4]</li>
+<li>Balancing research and delivery: Start from user requirements and SLAs, run small, well-scoped experiments, and only productize techniques that show measurable gains under realistic constraints. Keep the core system stable and introduce new ideas behind feature flags, A/B tests, and staged rollouts.[4][5]</li>
+</ol>
+<h2 id="rag-concepts-and-system-architecture">RAG concepts and system architecture</h2>
+<ol>
+<li>RAG explanation: A pattern where an LLM retrieves relevant documents from a knowledge base at query time and conditions its generation on those documents. This reduces hallucinations, provides up-to-date domain knowledge, and avoids retraining the model whenever data changes.[6][4]</li>
+<li>High-level RAG architecture:  </li>
+<li>Ingestion and preprocessing: connectors, text extraction, cleaning, chunking, metadata enrichment.  </li>
+<li>Indexing: vector index (embeddings) plus keyword index (BM25/Lucene) for hybrid retrieval.  </li>
+<li>Query pipeline: encode query, retrieve candidates, re-rank, build prompt with citations, call LLM, post-process and return answer plus sources.[7][4]</li>
+<li>Main failure modes and mitigations:  </li>
+<li>Irrelevant retrieval → better chunking, hybrid retrieval, re-ranking, query rewriting.  </li>
+<li>Hallucinations → answer constrained to retrieved context, citation requirements, “don’t know” handling.  </li>
+<li>Latency and cost → ANN indexes, caching, batching, streaming responses, and sensible context limits.[8][4]</li>
+</ol>
+<h2 id="dense-sparse-and-hybrid-retrieval">Dense, sparse, and hybrid retrieval</h2>
+<ol>
+<li>Sparse vs dense: Sparse (e.g., BM25) uses term frequencies and inverted indexes, good for exact keywords, rare terms, and low-resource setups. Dense uses embeddings and similarity search, better for semantic matches and paraphrases, but requires models and vector infra; choose hybrid when both exact and semantic signals matter.[9][3]</li>
+<li>Hybrid retrieval approach: Run BM25 and vector retrieval in parallel, then merge and re-rank results, possibly with learned weights or a cross-encoder. Tuning involves validating on labeled data, adjusting weights, top‑k sizes, and index configurations to balance relevance, latency, and cost.[3][7]</li>
+<li>Debugging degraded dense retrieval:  </li>
+<li>Check embedding model compatibility with new document types, distribution shifts, and preprocessing changes.  </li>
+<li>Analyze query–document pairs with manual inspection, run ablation studies, and track recall/precision by document type.  </li>
+<li>If needed, retrain or adapt the embedder, adjust chunking and metadata, or use specialized indices per domain.[10][6]</li>
+</ol>
+<h2 id="re-ranking-and-evaluation">Re-ranking and evaluation</h2>
+<ol>
+<li>Role of re-ranking: Refines an initial candidate set into an ordered list that best matches intent and context. Techniques: cross-encoder re-rankers, LLM-as-a-judge for small candidate sets, learning-to-rank models; often applied after bm25/ANN retrieval to optimize quality within latency budgets.[11][4]</li>
+<li>Evaluation setup:  </li>
+<li>Retrieval: precision@k, recall@k, MRR, nDCG using relevance-labeled query–document pairs.  </li>
+<li>End-to-end: task success, answer correctness/groundedness via human labels or LLM grading, hallucination rate, “no answer” quality.  </li>
+<li>Online: click-through, user feedback, time-to-answer, and satisfaction scores.[6][8]</li>
+<li>Example experiment: Randomly split labeled queries into train/validation/test; run pure dense vs hybrid retrieval, record metrics like recall@10 and nDCG@10, then compare across segments (by domain, query length, language). Interpret trade-offs in quality vs latency and pick the configuration aligned with business goals.[12][6]</li>
+</ol>
+<h2 id="llms-prompt-engineering-and-fine-tuning">LLMs, prompt engineering, and fine-tuning</h2>
+<ol>
+<li>Systematic prompt improvement: Start with a baseline prompt specifying role, format, and grounding rules; run on a benchmark set, analyze error patterns, iteratively refine instructions (e.g., ask for citations, insist on “I don’t know” when context is missing). Track metrics over prompt versions to avoid regressions.[13][6]</li>
+<li>When to fine-tune: Prefer improving retrieval, prompts, and system logic first. Consider fine-tuning for very domain-specific jargon, structured output formats that are hard to prompt for, or low-resource languages where base models struggle, using instruction-tuning or LoRA with curated in-domain examples.[14][4]</li>
+<li>Guardrails for grounding:  </li>
+<li>Constrain answers to retrieved snippets and require explicit citations.  </li>
+<li>Penalize or block content not supported by sources via output checks or LLM self-evaluation.  </li>
+<li>Use policies and classifiers to filter unsafe content and add a “no answer / escalate” path when confidence is low.[4][8]</li>
+</ol>
+<h2 id="agentic-ai-reasoning-and-knowledge-graphs">Agentic AI, reasoning, and knowledge graphs</h2>
+<ol>
+<li>Agentic architecture: An orchestrator (agent) uses the LLM to plan multi-step actions: decompose a complex query, call search tools multiple times, perhaps query a KG or SQL DB, then synthesize a final answer. This differs from single-turn RAG by explicitly modeling planning, tool use, and iterative refinement.[7][13]</li>
+<li>Using knowledge graphs: Combine KG lookups (for entities and relations) with vector and keyword search; e.g., for “Which customers use product X and reported issue Y?”, use KG to find customers linked to product X and issues, then use RAG to pull detailed descriptions from documents for those entities.[11][7]</li>
+<li>Risks of multi-agent/tool systems: Increased complexity, latency, and harder debugging; risk of agents looping or taking unsafe actions. Mitigation: strict tool schemas, step limits, explicit policies, monitoring, and limiting agent autonomy in production (e.g., human-in-the-loop for high-impact actions).[15][4]</li>
+</ol>
+<h2 id="backend-engineering-and-implementation">Backend engineering and implementation</h2>
+<ol>
+<li>RAG pipeline implementation:  </li>
+<li>Offline: ingestion workers, text extraction, chunking, embedding jobs, and indexing into vector + search backends.  </li>
+<li>Online: REST/gRPC API, authentication, query encoding, retrieval, re-ranking, prompt building, LLM calls, and response formatting with logging and metrics.  </li>
+<li>Integrated via message queues and microservices or a modular monolith.[8][4]</li>
+<li>Minimal production-ready service (e.g., in Python): FastAPI service exposing a <code>/query</code> endpoint; dependency-injected clients for vector store, search engine, and LLM provider; config via environment variables; structured logging and tracing; error handling with graceful fallbacks, timeouts, and circuit breakers; unit and integration tests plus CI/CD pipeline.[16][13]</li>
+<li>Performance and cost optimization:  </li>
+<li>Efficient chunking and top‑k; use ANN indexes, quantization, and caching of embeddings and previous results.  </li>
+<li>Batching LLM calls, response streaming, and limiting context size.  </li>
+<li>Observability for tokens, latency, and error rates; autoscaling and pre-warming of indexes and model runtimes.[12][3]</li>
+</ol>
+<h2 id="collaboration-research-transfer-and-customer-projects">Collaboration, research transfer, and customer projects</h2>
+<ol>
+<li>Research-to-production example: Implement a new re-ranking model or retrieval strategy from a recent paper, starting with a small-scale prototype on a subset of data, then running offline evaluation and limited online tests before integrating into production behind a feature flag. Challenges: reproducibility, data mismatch, and operational constraints.[5][1]</li>
+<li>Working with industry/public clients: Use discovery workshops and domain examples to clarify use cases; translate AI concepts into business impact and risks; set expectations around limitations (e.g., occasional hallucinations, data requirements, change management) and agree on measurable KPIs.[2][1]</li>
+<li>Communicating in cross-functional teams: Summarize experiments with clear goals, metrics, and trade-offs; provide dashboards and simple narratives instead of raw logs; propose options with pros/cons and a recommended choice aligned with product priorities.[1][5]</li>
+</ol>
+<h2 id="culture-language-and-working-style">Culture, language, and working style</h2>
+<ol>
+<li>Communication in distributed teams: Use clear written documentation (design docs, ADRs), async updates, and structured meeting agendas; adapt language to audience, using German or English as needed, and confirm understanding through summaries and follow-ups.[2][5]</li>
+<li>Continuous learning: Follow key conferences, blogs, and benchmarks for LLMs and IR; maintain a backlog of promising ideas, then periodically run time-boxed spikes or hackdays to prototype high-potential ones, measuring value before they enter the main roadmap.[2][12]</li>
+<li>Pragmatic trade-off example: Choosing a simpler BM25 + small reranker solution instead of a fully agentic multi-tool system to meet a deadline, with a plan to iterate later. Justification: delivers user value earlier, reduces operational risk, and fits team skills and infra at that moment.[5][4]</li>
+</ol>
+<p><a href="https://intrafind-software-ag.jobs.personio.de/job/2333893?language=de">1</a>
+<a href="https://intrafind.com/en/node/573">2</a>
+<a href="https://dev.to/skitsanosdesign/hybrid-search-combining-dense-and-sparse-vectors-for-superior-search-results-4dod">3</a>
+<a href="https://builtin.com/job/ai-engineer-retrieval-augmented-generation-rag/4833310">4</a>
+<a href="https://intrafind.com/en/career">5</a>
+<a href="https://www.datacamp.com/blog/rag-interview-questions">6</a>
+<a href="https://humanloop.com/blog/rag-architectures">7</a>
+<a href="https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/rag/rag-solution-design-and-evaluation-guide">8</a>
+<a href="https://www.linkedin.com/pulse/retrieval-techniques-sparse-dense-hybrid-najeeb-khan-ph-d--wmtpc">9</a>
+<a href="https://manishmazumder5.substack.com/p/rag-architecture-explained-ml-system">10</a>
+<a href="https://www.index.dev/job-description/rag-system-engineer">11</a>
+<a href="https://galileo.ai/blog/mastering-rag-how-to-architect-an-enterprise-rag-system">12</a>
+<a href="https://www.systemdesignhandbook.com/guides/generative-ai-system-design-interview/">13</a>
+<a href="https://www.projectpro.io/article/rag-interview-questions-and-answers/1065">14</a>
+<a href="https://www.linkedin.com/jobs/view/ai-engineer-%E2%80%93-retrieval-augmented-generation-rag-at-realweb-4298897908">15</a>
+<a href="https://dev.to/mrzaizai2k/how-i-aced-my-llm-interview-building-a-rag-chatbot-2p6f">16</a></p>
+<p>Strong candidates for this Backend Engineer (Search &amp; AI) role at IntraFind would demonstrate deep knowledge of RAG systems, hybrid retrieval, and production ML engineering, drawing from the job's emphasis on system architecture, dense/sparse search, prompt engineering, and research-to-production workflows.[1]</p>
+<h2 id="general-background-and-motivation_1">General background and motivation</h2>
+<ol>
+<li>Background might include 3+ years building search backends with Elasticsearch/OpenSearch and recent RAG/LLM projects; motivation centers on bridging classic IR with agentic AI for real-world enterprise use cases like public sector document search.[1]</li>
+<li>Project example: Developed a hybrid search API using Python, Sentence Transformers for embeddings, and BM25 via Elasticsearch, reducing query latency by 40% and improving recall for semantic queries in a customer support system.[1]</li>
+<li>Balance via iterative development: Prototype research ideas in sandboxes, validate with A/B tests on production traffic, and prioritize stability with canary releases while maintaining SLAs.[1]</li>
+</ol>
+<h2 id="rag-concepts-and-system-architecture_1">RAG concepts and system architecture</h2>
+<ol>
+<li>RAG retrieves relevant documents via vector/keyword search to ground LLM generation, solving hallucinations and staleness by injecting fresh context without full model retraining.[1]</li>
+<li>Architecture includes ingestion (chunking, embedding), hybrid indexing (vector DB + Elasticsearch), query-time retrieval/re-ranking, and LLM orchestration with citation prompts.[1]</li>
+<li>Failure modes: poor retrieval (fix with hybrid + re-ranking), hallucinations (enforce context-only responses), latency (ANN search, caching); monitor via RAGAS or custom metrics.[1]</li>
+</ol>
+<h2 id="dense-sparse-and-hybrid-retrieval_1">Dense, sparse, and hybrid retrieval</h2>
+<ol>
+<li>Sparse (BM25) excels at lexical matches and rare terms; dense (embeddings) handles semantics; prefer sparse for exact matches, dense for paraphrases, hybrid for robustness.[1]</li>
+<li>Hybrid: Parallel BM25 and dense retrieval, reciprocal rank fusion or cross-encoder re-ranking; tune alpha weights on eval data for precision@10 &gt;0.8 at &lt;500ms latency.[1]</li>
+<li>Debug: Profile embedding drift with t-SNE viz, compute per-type recall, retrain domain adapter or adjust chunk size/metadata filtering.[1]</li>
+</ol>
+<h2 id="re-ranking-and-evaluation_1">Re-ranking and evaluation</h2>
+<ol>
+<li>Re-ranking scores initial candidates for relevance (e.g., ColBERTv2 cross-encoder or LLM judge); boosts nDCG by 10-20% post-retrieval within fixed latency.[1]</li>
+<li>Retrieval: Hit Rate@K, MRR; E2E: faithfulness, answer relevance via LLM-as-judge; A/B with user thumbs-up and session metrics.[1]</li>
+<li>Experiment: Use 1k labeled queries, compute delta in nDCG/recall, segment by query type; hybrid wins if +5% quality at same speed.[1]</li>
+</ol>
+<h2 id="llms-prompt-engineering-and-fine-tuning_1">LLMs, prompt engineering, and fine-tuning</h2>
+<ol>
+<li>Iterate prompts: Baseline → chain-of-thought → few-shot with errors analyzed; score on dev set for groundedness improvements.[1]</li>
+<li>Fine-tune (LoRA) only after maxing retrieval/prompts, e.g., for domain jargon extraction; otherwise, RAG scales better.[1]</li>
+<li>Guardrails: "Answer only from context" instructions, post-gen citation check, confidence thresholding to trigger "insufficient info".[1]</li>
+</ol>
+<h2 id="agentic-ai-reasoning-and-knowledge-graphs_1">Agentic AI, reasoning, and knowledge graphs</h2>
+<ol>
+<li>Agent loop: LLM planner selects tools (search, KG query), executes iteratively, synthesizes; vs. single RAG by enabling decomposition/refinement.[1]</li>
+<li>KG enhances: Entity resolution + graph traversal before vector search, e.g., "related policies" expands to neighbors for richer context.[1]</li>
+<li>Risks: infinite loops, high cost; mitigate with max iterations, tool schemas, P99 latency SLAs, and sim-to-real validation.[1]</li>
+</ol>
+<h2 id="backend-engineering-and-implementation_1">Backend engineering and implementation</h2>
+<ol>
+<li>Pipeline: Kafka for ingestion, async embedding/indexing to Pinecone/ES, FastAPI for query serving with tracing (Jaeger).[1]</li>
+<li>Python service: FastAPI /query POST → embed → hybrid retrieve → rerank → OpenAI chat → stream response; add Pydantic models, retries, Prometheus metrics.[1]</li>
+<li>Opts: HNSW indexing, Redis cache for queries, dynamic top-k, token budgeting; aim &lt;1s p95, &lt;$0.01/query.[1]</li>
+</ol>
+<h2 id="collaboration-research-transfer-and-customer-projects_1">Collaboration, research transfer, and customer projects</h2>
+<ol>
+<li>Example: Ported GraphRAG paper to prototype, eval'd on client data, iterated to 15% recall gain before prod integration; challenge: noisy real data.[1]</li>
+<li>Elicit via user stories/prototypes, demo limitations early, co-define success KPIs like "80% deflection of helpdesk queries".[1]</li>
+<li>Use one-pagers: "Tried X vs Y: +Z% metric, cost trade-off A, recommend Y for Q3 launch"; dashboards for PMs.[1]</li>
+</ol>
+<h2 id="culture-language-and-working-style_1">Culture, language, and working style</h2>
+<ol>
+<li>Async-first: Markdown specs, Loom videos, Notion for feedback; bilingual docs, confirm via "tl;dr" summaries.[1]</li>
+<li>Track arXiv/HuggingFace, weekly lit review; prototype if paper benchmarks beat SOTA by &gt;5% on internal eval.[1]</li>
+<li>Trade-off: Shipped MVP with Elasticsearch over full vector DB to hit deadline, planned migration post-launch.[1]</li>
+</ol>
+<p><a href="https://intrafind.com/de/backend-engineer-search-ai-mit-fokus-auf-retrieval-augmented-generation">1</a></p>
+<p>Strong candidates demonstrate production experience with RAG systems, hybrid search, and backend engineering while aligning with IntraFind's focus on enterprise AI for public sector and industry clients.[1][2][3]</p>
+<h2 id="general-background-and-motivation_2">General Background and Motivation</h2>
+<p><strong>1. Walk through your background and explain interest in RAG at IntraFind.</strong><br />
+A strong candidate has 3-5 years in backend development with search/ML systems, such as building Elasticsearch-based services or deploying embedding models in production. They highlight projects like semantic search over documents using OpenSearch and Sentence Transformers, then transitioning to full RAG pipelines with LLMs like GPT-4 or Llama. Interest in IntraFind stems from its hybrid dense/sparse retrieval mandate, research partnerships, and real-world applications in Behörden (public administration) where grounded, low-hallucination AI is critical—unlike pure chatbots, IntraFind solves enterprise knowledge retrieval at scale.[2][1]</p>
+<p><strong>2. Describe a recent search/AI backend project.</strong><br />
+In a customer support platform, I led development of a RAG service handling 10k daily queries over tickets and docs. Used Python/FastAPI for the API, Elasticsearch for BM25 sparse retrieval, FAISS for dense embeddings (via all-MiniLM-L6-v2), and Cohere reranker. Impact: 35% reduction in median resolution time (from 15min to 9.7min), measured via A/B test with 5k users; scaled to 200 QPS with &lt;800ms p95 latency using async processing and Redis caching.[4][5][1]</p>
+<p><strong>3. Balancing experimental work with production delivery.</strong><br />
+Use a staged approach: (1) Scoped prototypes in isolated envs (e.g., 1-week spikes for new rerankers), validated offline on benchmarks like BEIR or internal labeled data. (2) Canary rollouts (1% traffic) with synthetic monitoring. (3) Feature flags for gradual expansion. Prioritize by expected ROI—e.g., only integrate agentic flows if offline evals show &gt;10% end-to-end gain without &gt;2x latency. This kept 99.9% uptime on a prior project while iterating 3 research papers into prod quarterly.[6][1]</p>
+<h2 id="rag-concepts-and-architecture">RAG Concepts and Architecture</h2>
+<p><strong>4. Explain RAG to a technical stakeholder.</strong><br />
+RAG combines retrieval (finding relevant docs via search) with generation (LLM synthesis), injecting dynamic context into prompts to ground answers in your data. Unlike standalone LLMs (prone to outdated/hallucinated info), RAG enables "zero-shot" updates—just reindex new docs without retraining. Key wins: 20-50% hallucination drop, handles proprietary data, scales knowledge via vector stores vs static fine-tuning.[3][7]</p>
+<p><strong>5. Design a RAG system for heterogeneous enterprise docs.</strong><br />
+<strong>Ingestion:</strong> Connectors (e.g., S3, SharePoint) → OCR/text extraction (Tika/Unstructured) → chunking (semantic splits at 512 tokens + overlap) → metadata enrichment (entities via spaCy) → dual embedding/indexing (OpenAI ada-002 to Pinecone; BM25 to Elasticsearch).<br />
+<strong>Query:</strong> Embed query → hybrid retrieve top-100 → ColBERT rerank to top-10 → dynamic prompt ("Use only these docs: {context}") → stream LLM response with citations.<br />
+<strong>Orchestration:</strong> Airflow for batch indexing, Kubernetes for serving. Ensures &lt;2s latency at 100 QPS via HNSW ANN and caching.[8][1]</p>
+<p><strong>6. Main RAG failure modes and architectural fixes.</strong><br />
+- <strong>Retrieval misses:</strong> Hybrid dense/sparse + query rewriting (LLM expands synonyms).<br />
+- <strong>Context overload/hallucinations:</strong> Top-k compression, faithfulness checks (LLM scores "Does answer cite context?").<br />
+- <strong>Staleness/latency:</strong> CDC pipelines (Kafka) for delta indexing; ANN + edge caching. Monitor with RAGAS (context precision, answer groundedness) and alert on &gt;5% regression.[5][3]</p>
+<h2 id="dense-sparse-and-hybrid-retrieval_2">Dense, Sparse, and Hybrid Retrieval</h2>
+<p><strong>7. Sparse vs. dense differences and preferences.</strong><br />
+Sparse (BM25/Lucene) inverts terms for exact/lexical matches, excels on rare entities/out-of-vocab (no training data needed), but misses paraphrases. Dense (bi-encoder embeddings) captures semantics via cosine sim, great for intent matching ("fix printer" → "troubleshoot jam"), but brittle to domain shift. Prefer sparse for legal/policy docs (exact terms), dense for conversational queries; always hybrid for +15% recall.[9][4]</p>
+<p><strong>8. Implement/tune hybrid retrieval.</strong><br />
+Parallel pipelines: BM25 (Elasticsearch, top-50) + dense (Pinecone HNSW, top-50). Fuse via Reciprocal Rank Fusion (RRF: score = 1/(k+rank)) or learned alpha (dense_weight * dense + sparse). Tune: Grid search alpha [0.3-0.7] on 1k labeled queries targeting nDCG@10 &gt;0.75, &lt;400ms total. Production: Async fan-out, batch rerank.[1][4]</p>
+<p><strong>9. Debug degraded dense retriever post new docs.</strong><br />
+(1) Metrics: Per-type recall@20 drop? (2) Viz: t-SNE embeddings for drift (new docs cluster apart?). (3) Ablate: Test chunking (fixed 256→semantic), embedder (swap to bge-large), or filter metadata. (4) Quick fix: Domain adapter (LoRA on embedder); validate on held-out set before prod.[10][3]</p>
+<h2 id="re-ranking-and-evaluation_2">Re-ranking and Evaluation</h2>
+<p><strong>10. Role/techniques for re-ranking.</strong><br />
+Post-retrieval refinement of ~100 noisy candidates to top-5 precise ones. Techniques: Cross-encoders (e.g., ms-marco-MiniLM, pairwise score query-doc); LLM-judge ("Rank these by relevance"); LTR models (XGBoost on features). Gains 10-25% nDCG for 50-100ms cost—essential in hybrid setups.[5][1]</p>
+<p><strong>11. RAG evaluation design.</strong><br />
+<strong>Retrieval:</strong> Precision@5, Recall@20, MRR, nDCG (BEIR/MS MARCO datasets + internal gold queries).<br />
+<strong>E2E:</strong> Faithfulness (LLM extracts citations match answer?), Answer Relevance (ROUGE/BERTScore + human/LLM judge), Hallucination Rate.<br />
+<strong>Online:</strong> User thumbs-up, session depth, deflection rate. Automate with LangSmith/RAGAS, A/B via traffic split.[3][8]</p>
+<p><strong>12. Compare retrieval strategies experiment.</strong><br />
+Dataset: 2k queries x 10k docs, 5-annotator relevance labels. Run pure-dense, pure-sparse, hybrid; metrics: nDCG@5/10, latency. Segment by domain/query-type. Hybrid wins if +8% quality at parity speed; visualize ROC curves. Iterate: Tune fusion weights on val set.[11][3]</p>
+<h2 id="llms-prompt-engineering-fine-tuning">LLMs, Prompt Engineering, Fine-tuning</h2>
+<p><strong>13. Systematically improve prompts for RAG.</strong><br />
+Baseline: "Answer using context." → Analyze 100 fails (missing citations? verbose?). → CoT: "Step1: List key facts from context. Step2: Answer only those." → Few-shot (3 examples). → Eval groundedness on 200-set; iterate to &gt;90% pass rate. Tools: Promptfoo for versioning.[12][3]</p>
+<p><strong>14. Fine-tune vs. retrieval/prompt changes.</strong><br />
+Exhaust system first (hybrid retrieval + rerank often &gt; fine-tune gains). Fine-tune for: Domain syntax (e.g., legal German), JSON outputs. Example: LoRA on Llama-3-8B with 5k {query,context,answer} pairs—gained 12% on jargon-heavy evals vs. RAG alone.[13][5]</p>
+<p><strong>15. Guardrails for grounded answers.</strong><br />
+Prompt: "Cite passages; say 'Insufficient info' if unsure." Post-gen: Extract citations, verify overlap (&gt;70% answer tokens grounded). Confidence: LLM self-score ("0-10 relevant?"). Block/retry low scores. Production: Canary + human review loop.[8][5]</p>
+<h2 id="agentic-ai-reasoning-knowledge-graphs">Agentic AI, Reasoning, Knowledge Graphs</h2>
+<p><strong>16. Agentic vs. single-turn RAG architecture.</strong><br />
+Agent: LLM planner ("Decompose: search policies → find exceptions → summarize") → tool calls (hybrid_search(), kg_query()). Loop max-3 steps → final synthesis. Vs. single RAG: Handles multi-hop ("Who approves X in dept Y?") via iteration; +20% accuracy on HotpotQA but 3x latency.[7][1]</p>
+<p><strong>17. Leverage KG in RAG.</strong><br />
+Pre-retrieve: KG (Neo4j) resolves "policy Z" → traverses "supersedes → active_version" → injects entity IDs as metadata filter for vector search. Example: "Budget rules for IT" → KG expands to related nodes → richer context. Boosts recall 15% on relational queries.[14][1]</p>
+<p><strong>18. Risks/mitigations for production agents.</strong><br />
+Risks: Loops/cost explosion, unsafe tools, nondeterminism. Mitigate: Max-5 steps, token budgets, Pydantic schemas, env-specific tools (prod: read-only), sim eval (1000 traces), observability (LangGraph traces). Start simple: Single-tool agent.[15][5]</p>
+<h2 id="backend-engineering-and-implementation_2">Backend Engineering and Implementation</h2>
+<p><strong>19. Implement RAG pipeline APIs/data flow.</strong><br />
+<strong>Ingestion:</strong> Kafka topics → Spark jobs (chunk/embed/index to ES+Pinecone).<br />
+<strong>Serving:</strong> gRPC /search (query → embed → retrieve → rerank → LLM → citations JSON). Observability: OpenTelemetry, Prometheus. Deploy: K8s with HPA, blue-green deploys.[1][8]</p>
+<p><strong>20. Production-ready RAG service outline (Python).</strong><br />
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">Depends</span><span class="p">;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">openai</span><span class="o">,</span><span class="w"> </span><span class="nn">pinecone</span><span class="o">,</span><span class="w"> </span><span class="nn">elasticsearch</span>
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
+<span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/query&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">rag_query</span><span class="p">(</span><span class="n">q</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">llm_client</span><span class="p">:</span> <span class="n">OpenAI</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">get_openai</span><span class="p">)):</span>
+    <span class="n">q_emb</span> <span class="o">=</span> <span class="n">embed</span><span class="p">(</span><span class="n">q</span><span class="p">);</span> <span class="n">docs</span> <span class="o">=</span> <span class="n">hybrid_retrieve</span><span class="p">(</span><span class="n">q_emb</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>  <span class="c1"># ES + Pinecone</span>
+    <span class="n">reranked</span> <span class="o">=</span> <span class="n">colbert_rerank</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">docs</span><span class="p">[:</span><span class="mi">20</span><span class="p">]);</span> <span class="n">ctx</span> <span class="o">=</span> <span class="n">format_context</span><span class="p">(</span><span class="n">reranked</span><span class="p">)</span>
+    <span class="n">resp</span> <span class="o">=</span> <span class="n">llm_client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="s2">&quot;Use only: &quot;</span> <span class="o">+</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">q</span><span class="p">);</span> <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;answer&quot;</span><span class="p">:</span> <span class="n">resp</span><span class="p">,</span> <span class="s2">&quot;sources&quot;</span><span class="p">:</span> <span class="n">citations</span><span class="p">}</span>
+</code></pre></div>
+Add: Env config (Pydantic), retries (tenacity), metrics (Prom), tests (pytest), Docker/K8s.[16][1]</p>
+<p><strong>21. Performance/cost optimization.</strong><br />
+Retrieval: HNSW/GQ for ANN (&lt;10ms), Redis LRU for query embeds (hit&gt;80%). LLM: Batch small queries, stream, truncate ctx&lt;8k tokens. Chunk: Overlap+metadata for precision. Monitor: $0.005/query target, Grafana alerts on p99&gt;1.5s.[4][11]</p>
+<h2 id="collaboration-research-customer-projects">Collaboration, Research, Customer Projects</h2>
+<p><strong>22. Translate research to production.</strong><br />
+Implemented GraphRAG (Microsoft paper): Prototyped on client policies (Neo4j + LlamaIndex), evals showed +18% multi-hop recall vs. baseline. Challenges: Sparse real graphs → entity extraction pipeline; scaled via summaries. Rolled out to 2 clients post-2mo pilot.[6][1]</p>
+<p><strong>23. Elicit requirements from non-technical clients.</strong><br />
+Workshops: "Show current pain (email chains?)" → prototype live demo → iterate on "good" examples. Set expectations: "90% auto-answer rate, cites sources, flags unknowns." KPIs: Query deflection, CSAT. Translate: "RAG = your docs power the AI."[17][1]</p>
+<p><strong>24. Communicate tech decisions cross-functionally.</strong><br />
+One-pager template: Problem → Options (Hybrid A vs Agent B) → Metrics (nDCG +5%, cost +20%) → Rec (A for Q3) → Next (A/B test). Dashboards: Real-time quality/latency via Streamlit. Meetings: 80/20 rule (80% impact, 20% details).[6][1]</p>
+<h2 id="culture-language-working-style">Culture, Language, Working Style</h2>
+<p><strong>25. Clear communication in remote/distributed settings.</strong><br />
+Async: Design docs (Markdown + Mermaid diagrams), PR reviews, Slack threads with tl;dr. Bilingual: C2 German tech specs + English for research. Confirm: "Echo back: Did I miss X?" Tools: Loom for complex demos.[1][6]</p>
+<p><strong>26. Stay current and decide prototyping.</strong><br />
+Routine: arXiv sanity, HF leaderboards, NeurIPS/ICLR papers. Threshold: Prototype if &gt;5% SOTA beat on internal BEIR + feasible infra (e.g., no custom silicon). Time-box: 2-day PoC, kill if no evals win.[11][1]</p>
+<p><strong>27. Pragmatic trade-off example.</strong><br />
+Faced deadline for policy Q&amp;A: Full agentic → too slow/risky. Shipped hybrid RAG MVP (ES + ada-002) hitting 85% accuracy in 4 weeks vs. 12-week agent. Post-launch: Migrated top queries to agents (+12%). Justified: Value now &gt; perfect later.[6][1]</p>
+<p><a href="https://intrafind.com/de/backend-engineer-search-ai-mit-fokus-auf-retrieval-augmented-generation">1</a>
+<a href="https://intrafind-software-ag.jobs.personio.de/job/2333893?language=de">2</a>
+<a href="https://www.datacamp.com/blog/rag-interview-questions">3</a>
+<a href="https://dev.to/skitsanosdesign/hybrid-search-combining-dense-and-sparse-vectors-for-superior-search-results-4dod">4</a>
+<a href="https://builtin.com/job/ai-engineer-retrieval-augmented-generation-rag/4833310">5</a>
+<a href="https://intrafind.com/en/career">6</a>
+<a href="https://humanloop.com/blog/rag-architectures">7</a>
+<a href="https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/rag/rag-solution-design-and-evaluation-guide">8</a>
+<a href="https://www.linkedin.com/pulse/retrieval-techniques-sparse-dense-hybrid-najeeb-khan-ph-d--wmtpc">9</a>
+<a href="https://manishmazumder5.substack.com/p/rag-architecture-explained-ml-system">10</a>
+<a href="https://galileo.ai/blog/mastering-rag-how-to-architect-an-enterprise-rag-system">11</a>
+<a href="https://www.systemdesignhandbook.com/guides/generative-ai-system-design-interview/">12</a>
+<a href="https://www.projectpro.io/article/rag-interview-questions-and-answers/1065">13</a>
+<a href="https://www.index.dev/job-description/rag-system-engineer">14</a>
+<a href="https://www.linkedin.com/jobs/view/ai-engineer-%E2%80%93-retrieval-augmented-generation-rag-at-realweb-4298897908">15</a>
+<a href="https://dev.to/mrzaizai2k/how-i-aced-my-llm-interview-building-a-rag-chatbot-2p6f">16</a>
+<a href="https://intrafind.com/en/node/573">17</a></p>
+<p>Here are 12 additional interview questions tailored to advanced aspects of the role, such as LLMOps, multimodal RAG, chunking strategies, and production agentic systems. Each includes detailed sample answers from a strong candidate.[1][2][3]</p>
+<h2 id="advanced-rag-techniques">Advanced RAG Techniques</h2>
+<p><strong>28. Compare different chunking strategies for RAG ingestion and when to use each.</strong><br />
+Fixed-size (e.g., 512 tokens) is simple and uniform but splits sentences, losing context. Semantic chunking (via LLM/sentence embeddings) preserves meaning, ideal for long docs like policies (+10-15% retrieval precision). Recursive (LangChain) handles hierarchy (PDF sections). Hybrid: Semantic + fixed overlap (20%). Choose semantic for enterprise heterogeneity; eval on retrieval recall to confirm &lt;5% boundary errors.[2][3]</p>
+<p><strong>29. How would you implement and evaluate an LLMOps pipeline for continuous RAG experimentation?</strong><br />
+<strong>Pipeline:</strong> GitOps (DVC for data/model versions) → Weights &amp; Biases for tracking → Airflow DAGs (ingest → embed → index → eval). <strong>Eval frameworks:</strong> RAGAS (context precision/relevancy), DeepEval (faithfulness), custom LLM-judge for end-to-end. <strong>Production:</strong> Shadow traffic A/B, Prometheus for drift alerts (embedding KL-divergence). Iterated weekly on a prior project, boosting nDCG by 12% via auto-pruning bad experiments.[4][5]</p>
+<p><strong>30. Design a multimodal RAG extension for documents with images/tables (e.g., public admin reports).</strong><br />
+<strong>Ingestion:</strong> Text via Unstructured.io → images/tables to Gemini/CLIP embeddings → unified index (Milvus with separate namespaces). <strong>Query:</strong> Multimodal embed (text+vision model like BLIP-2) → fusion retrieve (late fusion: rank text+image separately, reciprocal rank merge). <strong>Generation:</strong> Prompt with markdown-rendered context. Latency: &lt;3s via quantized models. Gains: +25% accuracy on chart queries per benchmarks.[6][7]</p>
+<h2 id="agentic-ai-and-knowledge-graphs">Agentic AI and Knowledge Graphs</h2>
+<p><strong>31. Walk through debugging a production agentic AI system that's looping or hallucinating tools.</strong><br />
+<strong>Steps:</strong> (1) Trace full execution (LangGraph/Phoenix) for cycle detection (&gt;max_steps=5). (2) Tool logs: Validate schemas (Pydantic), mock failures. (3) Hallucination: Token-level attribution (via ShardedKVCache). <strong>Fixes:</strong> Strict parsers, env guards (prod: read-only tools), eval traces on synthetic multi-hop dataset. Reduced loops 90% in a support agent by adding confidence thresholds.[8][9]</p>
+<p><strong>32. How does GraphRAG differ from vanilla RAG, and when does it outperform on enterprise graphs?</strong><br />
+GraphRAG builds entity-relation summaries from KG (e.g., Neo4j/LLM extraction), enabling global reasoning (e.g., "enterprise-wide trends") vs. vanilla's local chunk retrieval. Outperforms on multi-hop/sparse queries (+30% on HotpotQA) but costlier. Hybrid: KG pre-filter → vector retrieve. For IntraFind policies: Extract "supersedes" edges → richer context for "current rules".[10][11][1]</p>
+<p><strong>33. Describe risks and mitigations for scaling agentic workflows with external tools (e.g., KG queries) in production.</strong><br />
+<strong>Risks:</strong> Latency spikes (tool timeouts), security (SQLi via LLM), nondeterminism. <strong>Mitigations:</strong> Async tool fan-out (Ray), circuit breakers (90th %ile &gt;2s → fallback RAG), sandboxed execution (Docker), rate limits. Observability: Custom spans for tool success/cost. Deployed a similar agent handling 1k RPM with 99.5% uptime.[12][13]</p>
+<h2 id="production-and-evaluation-depth">Production and Evaluation Depth</h2>
+<p><strong>34. How do you handle retrieval drift in a live RAG system (e.g., after domain shift from new client docs)?</strong><br />
+<strong>Detect:</strong> Weekly embedding drift (MMD/KL on query distributions), per-metric alerts (nDCG drop &gt;3%). <strong>Respond:</strong> (1) Canary reindex subset. (2) Adaptive retrieval (router LLM picks dense/sparse/KG). (3) Continual learning (fine-tune embedder on recent fails via LoRA). Fixed drift in a legal corpus by auto-blending old/new indices.[3][12]</p>
+<p><strong>35. Outline security best practices for a RAG backend serving public sector clients.</strong><br />
+Input sanitization (prompt injection guards via NeMoGuardrails), RAGAS-like context stripping for PII (NER → redact), RBAC on indices (Pinecone namespaces per tenant). Audit: All queries logged (GDPR-compliant), anomaly detection on embeddings. Fallback: "Access denied" for unauthorized docs. Passed SOC2 audit with zero vulns.[1][2]</p>
+<p><strong>36. What metrics and frameworks would you use to A/B test a new re-ranker (e.g., ColBERTv2 vs. LLM-judge)?</strong><br />
+<strong>Offline:</strong> nDCG@5/10, MRR on BEIR + internal 5k queries; cost-latency Pareto. <strong>Online:</strong> 10% traffic split, primary: User satisfaction (thumbs-up &gt;+5%), secondary: deflection rate, session time. <strong>Framework:</strong> Arize Phoenix for traces, Statsig for splits. LLM-judge won +7% but 2x cost—hybrid deployed.[14][2]</p>
+<h2 id="backend-and-research-integration">Backend and Research Integration</h2>
+<p><strong>37. How would you prototype LLMOps evaluation for multimodal RAG (text+images)?</strong><br />
+<strong>Eval set:</strong> Synthetic (GPT-4o generates query-image-answer triples) + human-labeled. <strong>Metrics:</strong> CLIPScore for image relevance, multimodal faithfulness (LLaVA judge: "Does answer describe image?"). <strong>Infra:</strong> Modal/Docker for GPU spikes, Weights&amp;Biases sweeps. Prototyped in 1 week, validated +18% gains for table QA.[4][6]</p>
+<p><strong>38. Explain integrating classic search (Lucene) with agentic RAG for low-latency failover.</strong><br />
+<strong>Hybrid agent:</strong> Planner selects tool: BM25 for exact (&lt;50ms) → fallback dense/agent if low confidence. <strong>Code:</strong> LangChain toolset with Elasticsearch client. <strong>Benefits:</strong> 99.99% uptime; sparse handles OOV terms. Tuned router prompt for 95% sparse hit rate on structured queries.[12][1]</p>
+<p><strong>39. Describe transferring a recent research paper (e.g., on hybrid retrieval) to a customer prototype.</strong><br />
+Picked "HybridRAG" (arXiv): Implemented KG+vector fusion in LlamaIndex prototype (1-week). <strong>Eval:</strong> Client policy graph → +22% multi-hop recall. <strong>Transfer:</strong> Jupyter → FastAPI MVP, iterated with feedback. Challenges: Sparse client KG → LLM entity extraction. Deployed to 2 Behörden pilots.[11][1]</p>
+<p><strong>40. How do you optimize RAG cost at scale (e.g., 1M queries/month for industry clients)?</strong><br />
+<strong>Retrieval:</strong> Quantized embeddings (int8), HNSW top-k=20, Redis cache (80% hit). <strong>LLM:</strong> Smaller models (Llama-3.1-8B) for rerank, dynamic ctx truncate, batching. <strong>Target:</strong> &lt;$0.002/query. Monitored via OpenLLMetry; cut 60% via query dedup + embed reuse in production.[15][3]</p>
+<p><a href="https://intrafind.com/de/backend-engineer-search-ai-mit-fokus-auf-retrieval-augmented-generation">1</a>
+<a href="https://www.datacamp.com/blog/rag-interview-questions">2</a>
+<a href="https://www.projectpro.io/article/rag-interview-questions-and-answers/1065">3</a>
+<a href="https://github.com/Devinterview-io/llmops-interview-questions">4</a>
+<a href="https://www.linkedin.com/pulse/critical-role-evaluation-frameworks-llmops-sankara-reddy-thamma-k0jcc">5</a>
+<a href="https://zilliz.com/blog/three-key-patterns-to-building-multimodal-rag-comprehensive-guide">6</a>
+<a href="https://codelabs.developers.google.com/multimodal-rag-gemini">7</a>
+<a href="https://www.geeksforgeeks.org/artificial-intelligence/top-agentic-ai-interview-questions-and-answers/">8</a>
+<a href="https://www.projectpro.io/article/agentic-ai-interview-questions-and-answers/1127">9</a>
+<a href="https://www.datacamp.com/tutorial/knowledge-graph-rag">10</a>
+<a href="https://arxiv.org/html/2408.04948v1">11</a>
+<a href="https://github.com/llmgenai/LLMInterviewQuestions">12</a>
+<a href="https://www.finalroundai.com/blog/generative-ai-interview-questions-answers">13</a>
+<a href="https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/rag/rag-solution-design-and-evaluation-guide">14</a>
+<a href="https://galileo.ai/blog/mastering-rag-how-to-architect-an-enterprise-rag-system">15</a>
+<a href="https://www.igmguru.com/blog/rag-interview-questions">16</a>
+<a href="https://www.linkedin.com/posts/kalyanksnlp_rag-interview-questions-and-answers-book-activity-7383018299397304320-CD1x">17</a>
+<a href="https://bhavishyapandit9.substack.com/p/multimodal-retrieval-augmented-generation">18</a>
+<a href="https://www.pass4sure.com/blog/top-30-rag-interview-questions-and-answers-for-2025/">19</a>
+<a href="https://www.edureka.co/blog/agentic-ai-interview-questions/">20</a>
+<a href="https://www.reddit.com/r/LangChain/comments/1duz8qc/how_to_incorporate_a_knowledge_graph_in_rag/">21</a>
+<a href="https://www.mlstack.cafe/interview-questions/llmops">22</a>
+<a href="https://www.youtube.com/watch?v=BqJWARh4x-w">23</a></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.action.edit", "content.code.copy", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "search.share", "toc.follow", "content.code.copy", "content.tabs", "content.action"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
