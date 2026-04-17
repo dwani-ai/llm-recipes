@@ -43,6 +43,11 @@ type SampleUseCase = {
     modeSelection: ModeSelection;
   };
 };
+type PromptTemplatePreset = {
+  id: string;
+  title: string;
+  template: string;
+};
 
 const SAMPLE_USE_CASES: SampleUseCase[] = [
   {
@@ -303,6 +308,27 @@ Findings:
   },
 ];
 
+const EXPLICIT_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
+  {
+    id: "decision_memo",
+    title: "Decision Memo (default)",
+    template:
+      "Using {{dataset_name}}, produce a detailed, evidence-backed decision memo for {{goal}}. Return: (1) top findings, (2) trade-offs, (3) prioritized actions, and (4) measurable success criteria.",
+  },
+  {
+    id: "root_cause_risk",
+    title: "Root Cause + Risk Plan",
+    template:
+      "From {{dataset_name}}, perform deep root-cause analysis for {{goal}}. Return: (1) root causes by impact, (2) risk map with likelihood/severity, (3) mitigation plan with owners, and (4) measurable checkpoints.",
+  },
+  {
+    id: "executive_brief",
+    title: "Executive Brief + Roadmap",
+    template:
+      "Use {{dataset_name}} to generate an executive brief for {{goal}} with explicit assumptions. Return: (1) current-state diagnosis, (2) strategic options with trade-offs, (3) recommended roadmap by phase, and (4) KPI targets.",
+  },
+];
+
 function toVariableMap(rows: PromptVarRow[]): Record<string, string> {
   const data: Record<string, string> = {};
   for (const row of rows) {
@@ -351,9 +377,10 @@ export default function App() {
   const [trials, setTrials] = useState(10);
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
-  const [thinkingTokenBudget, setThinkingTokenBudget] = useState(1024);
+  const [thinkingTokenBudget, setThinkingTokenBudget] = useState(256);
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
+  const [selectedPromptPresetId, setSelectedPromptPresetId] = useState("decision_memo");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleStartLocal, setScheduleStartLocal] = useState(
     toDateTimeLocalString(new Date(Date.now() + 5 * 60 * 1000))
@@ -365,9 +392,13 @@ export default function App() {
   const [optimizationVariantCount, setOptimizationVariantCount] = useState(3);
   const [lockedPhrases, setLockedPhrases] = useState("");
   const [promptVars, setPromptVars] = useState<PromptVarRow[]>([
-    { key: "dataset_name", value: "customer_support_logs" },
-    { key: "goal", value: "reduce first token latency while preserving answer quality" },
-    { key: "data_context", value: "Multilingual user support queries over the last 30 days." },
+    { key: "dataset_name", value: "security_control_evidence_repository" },
+    { key: "goal", value: "prepare SOC2 gap-closure plan with explicit remediation milestones" },
+    {
+      key: "data_context",
+      value:
+        "Large static corpus containing policy docs, control test logs, auditor notes, prior incidents, ownership maps, and remediation history.",
+    },
   ]);
   const [promptPreview, setPromptPreview] = useState("");
   const [previewMissing, setPreviewMissing] = useState<string[]>([]);
@@ -422,7 +453,7 @@ export default function App() {
           implicit_cache: data.defaults.implicit_cache,
           explicit_cache: data.defaults.explicit_cache,
         });
-        setThinkingTokenBudget(data.defaults.thinking_token_budget ?? 1024);
+        setThinkingTokenBudget(data.defaults.thinking_token_budget ?? 256);
         setCacheIntent(
           cacheIntentFromMode({
             streaming: data.defaults.streaming,
@@ -513,12 +544,20 @@ export default function App() {
     setModel(sample.recommended.model);
     setModeSelection(sample.recommended.modeSelection);
     setCacheIntent(cacheIntentFromMode(sample.recommended.modeSelection));
-    setThinkingTokenBudget(1024);
+    setThinkingTokenBudget(256);
     setPromptPreview("");
     setPreviewMissing([]);
     setExactTokenCount(null);
     setTokenBreakdown([]);
     setTokenCountNote(null);
+  }
+
+  function applyPromptPreset() {
+    const preset = EXPLICIT_THINKING_PROMPT_PRESETS.find((item) => item.id === selectedPromptPresetId);
+    if (!preset) {
+      return;
+    }
+    setPromptTemplate(preset.template);
   }
 
   async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -1179,6 +1218,22 @@ export default function App() {
           </label>
           <button type="button" onClick={applySampleUseCase} disabled={!selectedUseCaseId}>
             Apply Example
+          </button>
+          <label>
+            Generated Prompt (non-streaming + thinking + explicit cache)
+            <select
+              value={selectedPromptPresetId}
+              onChange={(event) => setSelectedPromptPresetId(event.target.value)}
+            >
+              {EXPLICIT_THINKING_PROMPT_PRESETS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={applyPromptPreset}>
+            Apply Prompt
           </button>
         </div>
         <label>

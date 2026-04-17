@@ -9,8 +9,9 @@ def test_default_modes_endpoint_has_best_defaults() -> None:
     assert response.status_code == 200
     payload = response.json()["defaults"]
     assert payload["stack"] == "google_genai"
-    assert payload["streaming"] is True
-    assert payload["thinking"] is False
-    assert payload["thinking_token_budget"] == 1024
-    assert payload["implicit_cache"] is True
+    assert payload["streaming"] is False
+    assert payload["thinking"] is True
+    assert payload["thinking_token_budget"] == 256
+    assert payload["implicit_cache"] is False
+    assert payload["explicit_cache"] is True
 

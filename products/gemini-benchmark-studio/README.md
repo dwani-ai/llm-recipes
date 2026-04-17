@@ -19,10 +19,12 @@ Standalone product for benchmarking Gemini response modes with:
 - Best known mode defaults preselected:
   - stack: `google_genai`
   - model: `gemini-2.5-flash`
-  - mode: `streaming`
-  - thinking: `off`
-  - cache: `implicit_reuse`
+  - mode: `non_streaming`
+  - thinking: `on`
+  - thinking token budget: `256`
+  - cache: `explicit_cache`
 - Prompt template + variable editor and preview
+- Generated prompt presets for `non_streaming + thinking + explicit_cache` in UX
 - Agent-assisted prompt optimization (objective-based variants + winner selection)
 - One-click optimize + benchmark flow (kept separate from standalone optimize and benchmark actions)
 - Data file upload into `data_context` prompt variable
