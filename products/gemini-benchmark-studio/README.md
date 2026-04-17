@@ -349,6 +349,68 @@ The frontend expects backend at `http://localhost:8000`.
 - `POST /api/benchmark/run`
 - `GET /api/benchmark/history`
 
+## Run Benchmark from CLI
+
+You can run benchmarks directly from terminal without starting the UI.
+
+Defaults are:
+
+- stack: `google_genai` (GenAI SDK path)
+- mode: non-streaming
+- thinking: enabled
+- thinking token budget: `1024`
+
+Run with variables from terminal:
+
+```bash
+cd backend
+source venv/bin/activate
+python -m app.cli \
+  --api-key "$GEMINI_API_KEY" \
+  --model gemini-2.5-flash \
+  --var dataset_name=customer_support_logs \
+  --var goal="reduce latency variance" \
+  --var data_context="Support conversations from last 30 days."
+```
+
+Run from project root via shell wrapper:
+
+```bash
+cd products/gemini-benchmark-studio
+bash ./run_benchmark_cli.sh \
+  --api-key "$GEMINI_API_KEY" \
+  --var dataset_name=customer_support_logs \
+  --var goal="reduce latency variance"
+```
+
+Run with variables from a JSON file:
+
+```bash
+cd backend
+source venv/bin/activate
+python -m app.cli \
+  --api-key "$GEMINI_API_KEY" \
+  --vars-json ./vars.json
+```
+
+Example `vars.json`:
+
+```json
+{
+  "dataset_name": "customer_support_logs",
+  "goal": "reduce latency variance",
+  "data_context": "Support conversations from last 30 days."
+}
+```
+
+Notes:
+
+- `--var key=value` can be repeated and overrides matching keys from `--vars-json`.
+- Add `--streaming` to switch to streaming mode.
+- Add `--no-thinking` to disable thinking.
+- Use `--thinking-token-budget` to control thinking budget.
+- Use `--json` to print full run payload (artifacts + summaries) as JSON.
+
 For `vertex_api`, send `vertex_config` with:
 
 - `project_id`
