@@ -43,6 +43,31 @@ type SampleUseCase = {
     modeSelection: ModeSelection;
   };
 };
+
+const STACK_MODEL_OPTIONS: Record<string, string[]> = {
+  google_genai: [
+    "gemini-3.1-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro",
+    "gemini-3-flash",
+    "gemini-3-flash-lite",
+    "gemini-3-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+  ],
+  openai_compat: [
+    "gemini-3.1-flash",
+    "gemini-3-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+  ],
+  vertex_api: [
+    "gemini-3.1-flash",
+    "gemini-3-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+  ],
+};
 type PromptTemplatePreset = {
   id: string;
   title: string;
@@ -423,6 +448,10 @@ export default function App() {
   const [historyCompareA, setHistoryCompareA] = useState("");
   const [historyCompareB, setHistoryCompareB] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const modelOptions = useMemo(
+    () => STACK_MODEL_OPTIONS[stack] ?? STACK_MODEL_OPTIONS.google_genai,
+    [stack]
+  );
   const stackCapabilities = useMemo(() => {
     if (stack === "google_genai") {
       return { thinking: true, explicitCache: true, note: null as string | null };
@@ -492,6 +521,12 @@ export default function App() {
       return next;
     });
   }, [stackCapabilities]);
+
+  useEffect(() => {
+    if (modelOptions.length > 0 && !modelOptions.includes(model)) {
+      setModel(modelOptions[0]);
+    }
+  }, [model, modelOptions]);
 
   const variableMap = useMemo(() => toVariableMap(promptVars), [promptVars]);
 
@@ -1053,7 +1088,16 @@ export default function App() {
           </label>
           <label>
             Model
-            <input value={model} onChange={(event) => setModel(event.target.value)} />
+            <select value={model} onChange={(event) => setModel(event.target.value)}>
+              {modelOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+              {!modelOptions.includes(model) && (
+                <option value={model}>{model}</option>
+              )}
+            </select>
           </label>
           <label>
             Trials
