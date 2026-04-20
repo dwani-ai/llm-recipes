@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List
 
 from agent.adk_runtime import ADKRuntime
@@ -47,6 +48,104 @@ class SupervisorAgent:
                 )
             ),
         )
+
+    def _write_final_report(self, response: BenchmarkResponse) -> None:
+        report_path_raw = response.artifacts.get("report_md")
+        if not report_path_raw:
+            return
+        report_path = Path(report_path_raw)
+        if not report_path.exists():
+            return
+
+        def _fmt_num(value: object, digits: int = 3) -> str:
+            if isinstance(value, (float, int)):
+                return f"{float(value):.{digits}f}"
+            return "n/a"
+
+        lines: List[str] = [
+            "# Gemini Benchmark Studio Report",
+            "",
+            f"Run ID: `{response.run_id}`",
+            "",
+            "## Recommendation",
+            "",
+            f"- Best scenario: `{response.recommendation.best_scenario_id or 'n/a'}`",
+            f"- Objective: `{response.recommendation.objective}`",
+            f"- Confidence: `{response.recommendation.confidence}`",
+            f"- Reliability score: `{response.recommendation.reliability_score:.3f}`",
+            f"- Acceptance status: `{response.recommendation.overall_acceptance_status}`",
+            (
+                "- Acceptance gate counts: "
+                f"pass={response.recommendation.gate_pass_count}, "
+                f"fail={response.recommendation.gate_fail_count}"
+            ),
+            f"- Rationale: {response.recommendation.rationale}",
+            "",
+            "## Ranked Eligible Scenarios",
+            "",
+            "| Rank | Scenario | Score | TTFT P50 (s) | E2E P50 (s) | Accuracy | Success Rate | Error Rate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+
+        for idx, row in enumerate(response.recommendation.ranked_scenarios, start=1):
+            ttft = row.get("ttft_p50_s")
+            e2e = row.get("e2e_p50_s")
+            accuracy = row.get("accuracy_score")
+            lines.append(
+                "| "
+                f"{idx} | {row.get('scenario_id', 'n/a')} | {row.get('score', 0.0):.4f} | "
+                f"{_fmt_num(ttft)} | "
+                f"{_fmt_num(e2e)} | "
+                f"{_fmt_num(accuracy)} | "
+                f"{(row.get('success_rate', 0.0) * 100):.1f}% | "
+                f"{(row.get('error_rate', 0.0) * 100):.1f}% |"
+            )
+
+        if not response.recommendation.ranked_scenarios:
+            lines.append("| - | n/a | n/a | n/a | n/a | n/a | n/a | n/a |")
+
+        lines.extend(
+            [
+                "",
+                "## Acceptance Testing Summary",
+                "",
+                "| Scenario | Tier | Acceptance | Accuracy Mean | Accuracy P50 | Accuracy P95 | TTFT P50 (s) | Reason |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+
+        for row in response.summaries:
+            acceptance = "n/a"
+            if row.acceptance_passed is True:
+                acceptance = "pass"
+            elif row.acceptance_passed is False:
+                acceptance = "fail"
+            lines.append(
+                "| "
+                f"{row.scenario_id} | {row.acceptance_tier} | {acceptance} | "
+                f"{_fmt_num(row.accuracy_score)} | "
+                f"{_fmt_num(row.accuracy_p50)} | "
+                f"{_fmt_num(row.accuracy_p95)} | "
+                f"{_fmt_num(row.ttft_p50_s)} | "
+                f"{row.acceptance_reason or row.note or 'ok'} |"
+            )
+
+        if response.recommendation.disqualified_scenarios:
+            lines.extend(["", "## Disqualified Scenarios", ""])
+            for item in response.recommendation.disqualified_scenarios:
+                lines.append(f"- `{item.get('scenario_id', 'n/a')}`: {item.get('reason', 'unknown')}")
+
+        if response.recommendation.alternatives:
+            lines.extend(["", "## Alternatives", ""])
+            for alt in response.recommendation.alternatives:
+                lines.append(f"- {alt}")
+
+        lines.extend(["", "## Artifacts", ""])
+        for key, value in response.artifacts.items():
+            lines.append(f"- {key}: `{value}`")
+
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        response.artifacts["acceptance_report_md"] = str(report_path)
 
     def run(self, request: BenchmarkRequest) -> SupervisorResult:
         trace: List[str] = ["SupervisorAgent: starting workflow."]
@@ -129,6 +228,7 @@ class SupervisorAgent:
             reasoning_trace=trace,
             artifacts=worker_output.run_payload["artifacts"],
         )
+        self._write_final_report(response)
         return SupervisorResult(response=response, trace=trace)
 
     def fallback_response(self, error_message: str) -> BenchmarkResponse:

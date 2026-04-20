@@ -1259,6 +1259,66 @@ export default function App() {
 
   const bestRankedScenario = result?.recommendation.ranked_scenarios?.[0] ?? null;
   const runnerUpScenario = result?.recommendation.ranked_scenarios?.[1] ?? null;
+  const parseOptionalNumber = (value: string): number | null => {
+    const parsed = Number(value);
+    if (!value.trim() || Number.isNaN(parsed) || parsed <= 0) {
+      return null;
+    }
+    return parsed;
+  };
+  const thresholdByTier = (tier: AcceptanceTier): { minAccuracy: number; maxTtft: number | null } => {
+    if (tier === "critical") {
+      return { minAccuracy: criticalAccuracyThreshold, maxTtft: parseOptionalNumber(criticalMaxTtft) };
+    }
+    if (tier === "exploratory") {
+      return { minAccuracy: exploratoryAccuracyThreshold, maxTtft: parseOptionalNumber(exploratoryMaxTtft) };
+    }
+    return { minAccuracy: standardAccuracyThreshold, maxTtft: parseOptionalNumber(standardMaxTtft) };
+  };
+  const acceptanceReportRows = useMemo(() => {
+    if (!result) {
+      return [];
+    }
+    const rows = result.summaries.map((row) => {
+      const tier = row.acceptance_tier ?? "standard";
+      const thresholds = thresholdByTier(tier);
+      const accuracy = row.accuracy_score;
+      const accuracyDelta = accuracy === null ? null : accuracy - thresholds.minAccuracy;
+      const ttft = row.ttft_p50_s;
+      const ttftDelta =
+        thresholds.maxTtft === null || ttft === null ? null : ttft - thresholds.maxTtft;
+      return {
+        scenario_id: row.scenario_id,
+        tier,
+        passed: row.acceptance_passed,
+        accuracy,
+        minAccuracy: thresholds.minAccuracy,
+        accuracyDelta,
+        ttft,
+        maxTtft: thresholds.maxTtft,
+        ttftDelta,
+        reason: row.acceptance_reason ?? row.note ?? "n/a",
+      };
+    });
+    rows.sort((a, b) => {
+      const aPass = a.passed === true ? 1 : 0;
+      const bPass = b.passed === true ? 1 : 0;
+      if (aPass !== bPass) {
+        return aPass - bPass;
+      }
+      return a.scenario_id.localeCompare(b.scenario_id);
+    });
+    return rows;
+  }, [
+    result,
+    criticalAccuracyThreshold,
+    standardAccuracyThreshold,
+    exploratoryAccuracyThreshold,
+    criticalMaxTtft,
+    standardMaxTtft,
+    exploratoryMaxTtft,
+  ]);
+  const hasAcceptanceReportData = acceptanceReportRows.some((row) => row.passed !== null);
   const ttftDefinitionsInRun = useMemo(() => {
     if (!result) {
       return [];
@@ -2135,6 +2195,53 @@ export default function App() {
               </tbody>
             </table>
           </div>
+          <h3>Acceptance Report</h3>
+          {hasAcceptanceReportData ? (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Scenario</th>
+                    <th>Tier</th>
+                    <th>Pass</th>
+                    <th>Accuracy</th>
+                    <th>Min Accuracy</th>
+                    <th>Accuracy Delta</th>
+                    <th>TTFT P50</th>
+                    <th>Max TTFT</th>
+                    <th>TTFT Delta</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acceptanceReportRows.map((row) => (
+                    <tr key={`acceptance-${row.scenario_id}`}>
+                      <td>{row.scenario_id}</td>
+                      <td>{row.tier}</td>
+                      <td>{row.passed === null ? "n/a" : row.passed ? "pass" : "fail"}</td>
+                      <td>{row.accuracy?.toFixed(3) ?? "n/a"}</td>
+                      <td>{row.minAccuracy.toFixed(3)}</td>
+                      <td>
+                        {row.accuracyDelta === null
+                          ? "n/a"
+                          : `${row.accuracyDelta >= 0 ? "+" : ""}${row.accuracyDelta.toFixed(3)}`}
+                      </td>
+                      <td>{row.ttft?.toFixed(3) ?? "n/a"}</td>
+                      <td>{row.maxTtft === null ? "n/a" : row.maxTtft.toFixed(3)}</td>
+                      <td>
+                        {row.ttftDelta === null
+                          ? "n/a"
+                          : `${row.ttftDelta >= 0 ? "+" : ""}${row.ttftDelta.toFixed(3)}`}
+                      </td>
+                      <td>{row.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="muted">No acceptance evaluation data found for this run.</p>
+          )}
 
           {Object.keys(result.artifacts).length > 0 && (
             <div className="preview">
