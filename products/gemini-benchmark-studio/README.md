@@ -32,6 +32,8 @@ Standalone product for benchmarking Gemini response modes with:
 - Vertex API credentials form (project, location, endpoint, optional access token)
 - Scheduled run window (fixed 15 minutes) to measure latency behavior at selected time
 - Global scheduling semantics: all warmups + measured trials are distributed inside the selected 15-minute window
+- Rubric-based accuracy evaluation (optional) for model acceptance testing
+- Tiered acceptance gates (`critical`, `standard`, `exploratory`) with accuracy and optional latency ceilings
 - Benchmark run artifacts and recommendation report
 - Run history endpoint and UI table for recent runs
 
@@ -323,6 +325,35 @@ Interpretation guide:
 - Compare winner vs runner-up before rollout to avoid overfitting to one run.
 - If a run mixes multiple `ttft_definition` values, compare scenarios only within the same definition.
 
+## Accuracy Evaluation and Acceptance Gates
+
+When enabled, every measured (non-warmup) trial is evaluated by a rubric judge model.
+
+- Evaluation fields:
+  - `evaluation_enabled`
+  - `evaluation.judge_stack`, `evaluation.judge_model`
+  - `evaluation.rubric_criteria`
+  - `evaluation.tier_thresholds`
+- Acceptance tier:
+  - `acceptance_tier` chooses gate profile for the run.
+  - Tier defaults:
+    - `critical`: `min_accuracy_score >= 0.85`
+    - `standard`: `min_accuracy_score >= 0.75`
+    - `exploratory`: `min_accuracy_score >= 0.65`
+- Optional latency gate:
+  - set `max_ttft_p50_s` per tier.
+
+Scenario-level outputs now include:
+
+- `accuracy_score`, `accuracy_p50`, `accuracy_p95`
+- `evaluation_samples`
+- `acceptance_passed`, `acceptance_reason`, `acceptance_tier`
+
+Recommendation-level outputs now include:
+
+- `gate_pass_count`, `gate_fail_count`
+- `overall_acceptance_status`
+
 ## Project Layout
 
 - `frontend/` - React + Vite app
@@ -467,6 +498,7 @@ Run this sequence after setup:
    - disqualified reasons are understandable
    - best scenario can be applied to form controls.
    - if schedule is enabled, artifacts include `schedule_window_start` and `schedule_window_end`.
+   - if evaluation is enabled, rows show accuracy metrics and acceptance pass/fail reasons.
 
 ## Run Tests
 

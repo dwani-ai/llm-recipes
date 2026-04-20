@@ -25,6 +25,8 @@ type PromptVarRow = { key: string; value: string };
 type CacheStrategy = "none" | "implicit_reuse" | "explicit_cache";
 type CacheIntent = "none" | "implicit_reuse" | "explicit_cache";
 type BenchmarkObjective = "lowest_latency" | "balanced" | "reliability_first";
+type AcceptanceTier = "critical" | "standard" | "exploratory";
+type JudgeStack = "google_genai" | "openai_compat" | "vertex_api";
 type ThinkingMode = "auto" | "budget" | "level";
 type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 type CodeVariation = {
@@ -377,6 +379,27 @@ const LEVEL_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
   },
 ];
 
+const DEFAULT_EVALUATION_RUBRIC = [
+  {
+    key: "factuality",
+    label: "Factuality",
+    description: "Output aligns with provided data/context and avoids unsupported claims.",
+    weight: 0.4,
+  },
+  {
+    key: "completeness",
+    label: "Completeness",
+    description: "Output addresses the requested goal and includes required deliverables.",
+    weight: 0.35,
+  },
+  {
+    key: "policy_adherence",
+    label: "Policy Adherence",
+    description: "Output follows safety/compliance constraints and formatting requirements.",
+    weight: 0.25,
+  },
+];
+
 function toVariableMap(rows: PromptVarRow[]): Record<string, string> {
   const data: Record<string, string> = {};
   for (const row of rows) {
@@ -458,6 +481,16 @@ export default function App() {
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("medium");
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
+  const [evaluationEnabled, setEvaluationEnabled] = useState(false);
+  const [acceptanceTier, setAcceptanceTier] = useState<AcceptanceTier>("standard");
+  const [judgeStack, setJudgeStack] = useState<JudgeStack>("google_genai");
+  const [judgeModel, setJudgeModel] = useState("gemini-2.5-flash");
+  const [criticalAccuracyThreshold, setCriticalAccuracyThreshold] = useState(0.85);
+  const [standardAccuracyThreshold, setStandardAccuracyThreshold] = useState(0.75);
+  const [exploratoryAccuracyThreshold, setExploratoryAccuracyThreshold] = useState(0.65);
+  const [criticalMaxTtft, setCriticalMaxTtft] = useState("");
+  const [standardMaxTtft, setStandardMaxTtft] = useState("");
+  const [exploratoryMaxTtft, setExploratoryMaxTtft] = useState("");
   const [selectedPromptPresetId, setSelectedPromptPresetId] = useState("budget_decision_memo");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleStartLocal, setScheduleStartLocal] = useState(
@@ -1009,6 +1042,25 @@ export default function App() {
   }
 
   function validateRunInputs(): string | null {
+    if (evaluationEnabled && !judgeModel.trim()) {
+      return "Judge model is required when evaluation is enabled.";
+    }
+    if (evaluationEnabled && criticalAccuracyThreshold < standardAccuracyThreshold) {
+      return "Critical accuracy threshold should be >= standard threshold.";
+    }
+    if (evaluationEnabled && standardAccuracyThreshold < exploratoryAccuracyThreshold) {
+      return "Standard accuracy threshold should be >= exploratory threshold.";
+    }
+    if (evaluationEnabled && judgeStack !== "vertex_api" && !apiKey.trim()) {
+      return "API key is required when evaluation judge stack is google_genai or openai_compat.";
+    }
+    if (
+      evaluationEnabled &&
+      judgeStack === "vertex_api" &&
+      (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim())
+    ) {
+      return "Vertex judge stack requires Project ID, Location, and Endpoint ID.";
+    }
     if (stack === "vertex_api") {
       if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
         return "Vertex Project ID, Location, and Endpoint ID are required for vertex_api.";
@@ -1040,6 +1092,8 @@ export default function App() {
   }
 
   function buildBenchmarkPayload(templateOverride?: string): BenchmarkRequest {
+    const parseMaxTtft = (value: string): number | null =>
+      value.trim() ? Math.max(0, Number(value) || 0) || null : null;
     const scheduleStartIso =
       scheduleEnabled && scheduleStartLocal
         ? new Date(scheduleStartLocal).toISOString()
@@ -1070,6 +1124,27 @@ export default function App() {
           : undefined,
       include_long_context: true,
       recommendation_objective: benchmarkObjective,
+      acceptance_tier: acceptanceTier,
+      evaluation_enabled: evaluationEnabled,
+      evaluation: {
+        judge_stack: judgeStack,
+        judge_model: judgeModel.trim() || "gemini-2.5-flash",
+        rubric_criteria: DEFAULT_EVALUATION_RUBRIC,
+        tier_thresholds: {
+          critical: {
+            min_accuracy_score: criticalAccuracyThreshold,
+            max_ttft_p50_s: parseMaxTtft(criticalMaxTtft),
+          },
+          standard: {
+            min_accuracy_score: standardAccuracyThreshold,
+            max_ttft_p50_s: parseMaxTtft(standardMaxTtft),
+          },
+          exploratory: {
+            min_accuracy_score: exploratoryAccuracyThreshold,
+            max_ttft_p50_s: parseMaxTtft(exploratoryMaxTtft),
+          },
+        },
+      },
       schedule_enabled: scheduleEnabled,
       schedule_start_at: scheduleStartIso,
       schedule_window_minutes: 15,
@@ -1272,6 +1347,47 @@ export default function App() {
           <label className="inline-toggle">
             <input
               type="checkbox"
+              checked={evaluationEnabled}
+              onChange={(event) => setEvaluationEnabled(event.target.checked)}
+            />
+            Enable accuracy evaluation
+          </label>
+          <label>
+            Acceptance Tier
+            <select
+              value={acceptanceTier}
+              disabled={!evaluationEnabled}
+              onChange={(event) => setAcceptanceTier(event.target.value as AcceptanceTier)}
+            >
+              <option value="critical">critical</option>
+              <option value="standard">standard</option>
+              <option value="exploratory">exploratory</option>
+            </select>
+          </label>
+          <label>
+            Judge Stack
+            <select
+              value={judgeStack}
+              disabled={!evaluationEnabled}
+              onChange={(event) => setJudgeStack(event.target.value as JudgeStack)}
+            >
+              <option value="google_genai">google_genai</option>
+              <option value="openai_compat">openai_compat</option>
+              <option value="vertex_api">vertex_api</option>
+            </select>
+          </label>
+          <label>
+            Judge Model
+            <input
+              value={judgeModel}
+              disabled={!evaluationEnabled}
+              onChange={(event) => setJudgeModel(event.target.value)}
+              placeholder="gemini-2.5-flash"
+            />
+          </label>
+          <label className="inline-toggle">
+            <input
+              type="checkbox"
               checked={scheduleEnabled}
               onChange={(event) => setScheduleEnabled(event.target.checked)}
             />
@@ -1297,6 +1413,72 @@ export default function App() {
           Planned run shape: {plannedScenarioCount} scenario(s) x {trials + warmupTrials} iterations ={" "}
           {plannedExecutionCount} total calls (includes warmups).
         </p>
+        {evaluationEnabled && (
+          <p className="muted">
+            Evaluation active: tier={acceptanceTier}, judge={judgeStack}:{judgeModel}.
+          </p>
+        )}
+        {evaluationEnabled && (
+          <div className="grid">
+            <label>
+              Critical Min Accuracy
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={criticalAccuracyThreshold}
+                onChange={(event) => setCriticalAccuracyThreshold(Math.max(0, Math.min(1, Number(event.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              Critical Max TTFT P50 (optional)
+              <input
+                value={criticalMaxTtft}
+                onChange={(event) => setCriticalMaxTtft(event.target.value)}
+                placeholder="e.g. 1.2"
+              />
+            </label>
+            <label>
+              Standard Min Accuracy
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={standardAccuracyThreshold}
+                onChange={(event) => setStandardAccuracyThreshold(Math.max(0, Math.min(1, Number(event.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              Standard Max TTFT P50 (optional)
+              <input
+                value={standardMaxTtft}
+                onChange={(event) => setStandardMaxTtft(event.target.value)}
+                placeholder="e.g. 1.8"
+              />
+            </label>
+            <label>
+              Exploratory Min Accuracy
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={exploratoryAccuracyThreshold}
+                onChange={(event) => setExploratoryAccuracyThreshold(Math.max(0, Math.min(1, Number(event.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              Exploratory Max TTFT P50 (optional)
+              <input
+                value={exploratoryMaxTtft}
+                onChange={(event) => setExploratoryMaxTtft(event.target.value)}
+                placeholder="e.g. 2.5"
+              />
+            </label>
+          </div>
+        )}
         {stack === "vertex_api" && (
           <div className="grid">
             <label>
@@ -1768,6 +1950,11 @@ export default function App() {
             {result.recommendation.reliability_score.toFixed(3)}
           </p>
           <p>
+            <strong>Acceptance:</strong> {result.recommendation.overall_acceptance_status} |{" "}
+            <strong>Gate Pass:</strong> {result.recommendation.gate_pass_count} | <strong>Gate Fail:</strong>{" "}
+            {result.recommendation.gate_fail_count}
+          </p>
+          <p>
             <strong>Recommendation:</strong> {result.recommendation.rationale}
           </p>
           {hasMixedTtftDefinitions && (
@@ -1830,6 +2017,7 @@ export default function App() {
                       <th>TTFT P50</th>
                       <th>TTFT P95</th>
                       <th>E2E P50</th>
+                      <th>Accuracy</th>
                       <th>Success Rate</th>
                       <th>Error Rate</th>
                     </tr>
@@ -1842,6 +2030,7 @@ export default function App() {
                         <td>{row.ttft_p50_s?.toFixed(3) ?? "n/a"}</td>
                         <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
                         <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
+                        <td>{row.accuracy_score?.toFixed(3) ?? "n/a"}</td>
                         <td>{(row.success_rate * 100).toFixed(1)}%</td>
                         <td>{(row.error_rate * 100).toFixed(1)}%</td>
                       </tr>
@@ -1896,6 +2085,11 @@ export default function App() {
                   <th>TTFT P95</th>
                   <th>E2E P50</th>
                   <th>TPS Avg</th>
+                  <th>Acc Mean</th>
+                  <th>Acc P50</th>
+                  <th>Acc P95</th>
+                  <th>Tier</th>
+                  <th>Acceptance</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -1930,7 +2124,12 @@ export default function App() {
                     <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.tokens_per_s_avg?.toFixed(2) ?? "n/a"}</td>
-                    <td>{row.note ?? row.ttft_definition ?? "ok"}</td>
+                    <td>{row.accuracy_score?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.accuracy_p50?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.accuracy_p95?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.acceptance_tier}</td>
+                    <td>{row.acceptance_passed === null ? "n/a" : row.acceptance_passed ? "pass" : "fail"}</td>
+                    <td>{row.acceptance_reason ?? row.note ?? row.ttft_definition ?? "ok"}</td>
                   </tr>
                 ))}
               </tbody>

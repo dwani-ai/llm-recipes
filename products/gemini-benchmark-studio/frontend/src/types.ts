@@ -12,6 +12,29 @@ export type VertexConfig = {
   access_token?: string;
 };
 
+export type EvaluationRubricCriterion = {
+  key: string;
+  label: string;
+  description: string;
+  weight: number;
+};
+
+export type AcceptanceTierThreshold = {
+  min_accuracy_score: number;
+  max_ttft_p50_s?: number | null;
+};
+
+export type EvaluationConfig = {
+  judge_stack: "google_genai" | "openai_compat" | "vertex_api";
+  judge_model: string;
+  rubric_criteria: EvaluationRubricCriterion[];
+  tier_thresholds: {
+    critical: AcceptanceTierThreshold;
+    standard: AcceptanceTierThreshold;
+    exploratory: AcceptanceTierThreshold;
+  };
+};
+
 export type BenchmarkRequest = {
   api_key?: string;
   stacks: string[];
@@ -30,6 +53,9 @@ export type BenchmarkRequest = {
   vertex_config?: VertexConfig;
   include_long_context: boolean;
   recommendation_objective?: "lowest_latency" | "balanced" | "reliability_first";
+  acceptance_tier?: "critical" | "standard" | "exploratory";
+  evaluation_enabled?: boolean;
+  evaluation?: EvaluationConfig;
   schedule_enabled?: boolean;
   schedule_start_at?: string;
   schedule_window_minutes?: number;
@@ -54,6 +80,13 @@ export type ScenarioSummary = {
   ttft_p95_s: number | null;
   e2e_p50_s: number | null;
   tokens_per_s_avg: number | null;
+  accuracy_score: number | null;
+  accuracy_p50: number | null;
+  accuracy_p95: number | null;
+  evaluation_samples: number;
+  acceptance_tier: "critical" | "standard" | "exploratory";
+  acceptance_passed: boolean | null;
+  acceptance_reason: string | null;
   ttft_definition: string;
   note: string | null;
 };
@@ -75,6 +108,7 @@ export type BenchmarkResponse = {
       ttft_p95_s: number | null;
       e2e_p50_s: number | null;
       tokens_per_s_avg: number | null;
+      accuracy_score: number | null;
       success_rate: number;
       error_rate: number;
       unsupported_rate: number;
@@ -86,6 +120,9 @@ export type BenchmarkResponse = {
     reliability_score: number;
     confidence: string;
     objective: string;
+    gate_pass_count: number;
+    gate_fail_count: number;
+    overall_acceptance_status: "passed" | "failed" | "unknown";
   };
   reasoning_trace: string[];
   artifacts: Record<string, string>;

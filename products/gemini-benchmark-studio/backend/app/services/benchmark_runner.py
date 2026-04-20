@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.schemas import BenchmarkRequest
+from app.services.evaluator import RubricEvaluator
 from app.services.thinking_config import resolve_thinking_config
 
 
@@ -203,6 +204,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "first_final_output_token",
         }
 
@@ -226,6 +228,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "response_complete_non_streaming",
         }
 
@@ -282,6 +285,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "first_output_token",
         }
 
@@ -308,6 +312,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "response_complete_non_streaming",
         }
 
@@ -427,6 +432,11 @@ class BenchmarkRunner:
                 for item in items
                 if item["status"] == "ok" and item["tokens_per_s"] is not None
             ]
+            accuracy_scores = [
+                item["accuracy_score"]
+                for item in items
+                if item["status"] == "ok" and item.get("accuracy_score") is not None
+            ]
             first = items[0]
             statuses = [item["status"] for item in items]
             unsupported = [item.get("reason") for item in items if item["status"] == "unsupported"]
@@ -451,6 +461,13 @@ class BenchmarkRunner:
                     "ttft_p95_s": percentile(ttfts, 95),
                     "e2e_p50_s": percentile(e2es, 50),
                     "tokens_per_s_avg": statistics.fmean(tps) if tps else None,
+                    "accuracy_score": statistics.fmean(accuracy_scores) if accuracy_scores else None,
+                    "accuracy_p50": percentile(accuracy_scores, 50),
+                    "accuracy_p95": percentile(accuracy_scores, 95),
+                    "evaluation_samples": len(accuracy_scores),
+                    "acceptance_tier": first.get("acceptance_tier", "standard"),
+                    "acceptance_passed": None,
+                    "acceptance_reason": None,
                     "ttft_definition": first.get("ttft_definition", "first_output_token"),
                     "note": unsupported[0] if unsupported else (errors[0] if errors else None),
                 }
@@ -503,6 +520,7 @@ class BenchmarkRunner:
         prompts = self._prompt_configs(rendered_prompt, request.prompt_variables)
 
         adapters: Dict[str, Any] = {}
+        evaluator = RubricEvaluator(request) if request.evaluation_enabled else None
         if "google_genai" in request.stacks:
             try:
                 adapters["google_genai"] = GoogleGenAIAdapter(request.api_key or "")
@@ -578,6 +596,12 @@ class BenchmarkRunner:
                         "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": f"unsupported_stack:{scenario.stack}",
                         "error": None,
+                        "accuracy_score": None,
+                        "evaluation_status": "not_evaluated",
+                        "evaluation_error": None,
+                        "evaluation_rationale": None,
+                        "evaluation_criteria": {},
+                        "acceptance_tier": request.acceptance_tier,
                     }
                 )
                 continue
@@ -607,12 +631,35 @@ class BenchmarkRunner:
                         "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": None,
                         "error": adapter["init_error"],
+                        "accuracy_score": None,
+                        "evaluation_status": "not_evaluated",
+                        "evaluation_error": None,
+                        "evaluation_rationale": None,
+                        "evaluation_criteria": {},
+                        "acceptance_tier": request.acceptance_tier,
                     }
                 )
                 continue
 
             started_at = utc_now_iso()
             payload = adapter.run_once(scenario, prompt_cfg)
+            evaluation_status = "not_evaluated"
+            evaluation_error = None
+            evaluation_rationale = None
+            evaluation_criteria: Dict[str, float] = {}
+            accuracy_score = None
+            if evaluator is not None and (not is_warmup) and payload.get("status") == "ok":
+                evaluation = evaluator.evaluate(
+                    rendered_prompt=rendered_prompt,
+                    data_context=prompt_cfg.get("shared_prefix", ""),
+                    model_output=payload.get("output_text", "") or "",
+                    acceptance_tier=request.acceptance_tier,
+                )
+                evaluation_status = evaluation.status
+                evaluation_error = evaluation.error
+                evaluation_rationale = evaluation.rationale
+                evaluation_criteria = evaluation.criteria_scores
+                accuracy_score = evaluation.accuracy_score
             raw_rows.append(
                 {
                     "started_at": started_at,
@@ -637,6 +684,12 @@ class BenchmarkRunner:
                     "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                     "reason": payload.get("reason"),
                     "error": payload.get("error"),
+                    "accuracy_score": accuracy_score,
+                    "evaluation_status": evaluation_status,
+                    "evaluation_error": evaluation_error,
+                    "evaluation_rationale": evaluation_rationale,
+                    "evaluation_criteria": evaluation_criteria,
+                    "acceptance_tier": request.acceptance_tier,
                 }
             )
 
@@ -646,6 +699,22 @@ class BenchmarkRunner:
         summaries = self._aggregate(raw_rows)
         summary_json = run_dir / "summary.json"
         summary_json.write_text(json.dumps(summaries, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+
+        evaluation_summary_rows = [
+            {
+                "scenario_id": row["scenario_id"],
+                "accuracy_score": row.get("accuracy_score"),
+                "accuracy_p50": row.get("accuracy_p50"),
+                "accuracy_p95": row.get("accuracy_p95"),
+                "evaluation_samples": row.get("evaluation_samples", 0),
+            }
+            for row in summaries
+        ]
+        evaluation_summary = run_dir / "evaluation_summary.json"
+        evaluation_summary.write_text(
+            json.dumps(evaluation_summary_rows, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
 
         summary_csv = run_dir / "summary.csv"
         self._write_csv(summary_csv, summaries)
@@ -659,6 +728,7 @@ class BenchmarkRunner:
             "summary_json": str(summary_json),
             "summary_csv": str(summary_csv),
             "report_md": str(report_md),
+            "evaluation_summary_json": str(evaluation_summary),
         }
         if request.schedule_enabled:
             start_at = request.schedule_start_at or datetime.now(tz=timezone.utc)

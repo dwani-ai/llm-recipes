@@ -10,6 +10,9 @@ class AnalyzerOutput:
     disqualified_scenarios: List[Dict[str, str]]
     reliability_score: float
     confidence: str
+    gate_pass_count: int
+    gate_fail_count: int
+    overall_acceptance_status: str
     trace: List[str]
 
 
@@ -40,10 +43,23 @@ class AnalyzerAgent:
             return "medium"
         return "low"
 
-    def analyze(self, summaries: List[Dict[str, Any]], objective: str = "lowest_latency") -> AnalyzerOutput:
+    def analyze(
+        self,
+        summaries: List[Dict[str, Any]],
+        objective: str = "lowest_latency",
+        acceptance_tier: str = "standard",
+        tier_thresholds: Optional[Dict[str, Dict[str, Any]]] = None,
+        evaluation_enabled: bool = False,
+    ) -> AnalyzerOutput:
         trace: List[str] = []
         eligible: List[Dict[str, Any]] = []
         disqualified: List[Dict[str, str]] = []
+        gate_pass_count = 0
+        gate_fail_count = 0
+
+        tier_cfg = (tier_thresholds or {}).get(acceptance_tier, {})
+        min_accuracy = float(tier_cfg.get("min_accuracy_score", 0.0))
+        max_ttft = tier_cfg.get("max_ttft_p50_s")
 
         for row in summaries:
             samples = int(row.get("samples", 0) or 0)
@@ -60,13 +76,27 @@ class AnalyzerAgent:
                 reason = "low_success_rate"
             elif unsupported_count > ok_count:
                 reason = "mostly_unsupported"
+            elif max_ttft is not None and row.get("ttft_p50_s") is not None and row.get("ttft_p50_s") > max_ttft:
+                reason = "failed_latency_gate_for_tier"
+            elif evaluation_enabled and row.get("accuracy_score") is None:
+                reason = "evaluation_unavailable"
+            elif evaluation_enabled and float(row.get("accuracy_score") or 0.0) < min_accuracy:
+                reason = "failed_accuracy_gate"
             else:
                 reason = ""
 
             if reason:
+                row["acceptance_tier"] = acceptance_tier
+                row["acceptance_passed"] = False
+                row["acceptance_reason"] = reason
                 disqualified.append({"scenario_id": row["scenario_id"], "reason": reason})
+                gate_fail_count += 1
                 continue
 
+            row["acceptance_tier"] = acceptance_tier
+            row["acceptance_passed"] = True
+            row["acceptance_reason"] = "passed"
+            gate_pass_count += 1
             reliability = max(0.0, min(1.0, success_rate - ((error_count / samples) if samples > 0 else 0.0)))
             eligible.append(
                 {
@@ -86,6 +116,9 @@ class AnalyzerAgent:
                 disqualified_scenarios=disqualified,
                 reliability_score=0.0,
                 confidence="low",
+                gate_pass_count=gate_pass_count,
+                gate_fail_count=gate_fail_count,
+                overall_acceptance_status="failed" if gate_fail_count > 0 else "unknown",
                 trace=["AnalyzerAgent: no eligible scenario found after reliability gating."],
             )
 
@@ -115,6 +148,7 @@ class AnalyzerAgent:
                     "ttft_p95_s": row.get("ttft_p95_s"),
                     "e2e_p50_s": row.get("e2e_p50_s"),
                     "tokens_per_s_avg": row.get("tokens_per_s_avg"),
+                    "accuracy_score": row.get("accuracy_score"),
                     "success_rate": round(entry["success_rate"], 3),
                     "error_rate": round(entry["error_rate"], 3),
                     "unsupported_rate": round(entry["unsupported_rate"], 3),
@@ -130,6 +164,7 @@ class AnalyzerAgent:
         trace.extend(
             [
                 f"AnalyzerAgent: objective={objective}.",
+                f"AnalyzerAgent: acceptance_tier={acceptance_tier} min_accuracy={min_accuracy:.2f} max_ttft={max_ttft}.",
                 f"AnalyzerAgent: eligible={len(eligible)} disqualified={len(disqualified)}.",
                 f"AnalyzerAgent: selected {best_id} with score {ranked[0]['score']}.",
             ]
@@ -141,6 +176,9 @@ class AnalyzerAgent:
             disqualified_scenarios=disqualified,
             reliability_score=reliability_score,
             confidence=confidence,
+            gate_pass_count=gate_pass_count,
+            gate_fail_count=gate_fail_count,
+            overall_acceptance_status="passed" if gate_fail_count == 0 else "failed",
             trace=trace,
         )
 

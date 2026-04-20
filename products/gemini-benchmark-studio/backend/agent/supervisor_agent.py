@@ -80,7 +80,13 @@ class SupervisorAgent:
         trace.extend(tool_output.trace)
         trace.append(f"SupervisorAgent: tool outputs={tool_output.outputs}.")
 
-        analyzer = self.analyzer.analyze(summaries_raw, objective=request.recommendation_objective)
+        analyzer = self.analyzer.analyze(
+            summaries_raw,
+            objective=request.recommendation_objective,
+            acceptance_tier=request.acceptance_tier,
+            tier_thresholds={key: value.model_dump() for key, value in request.evaluation.tier_thresholds.items()},
+            evaluation_enabled=request.evaluation_enabled,
+        )
         trace.extend(analyzer.trace)
 
         optimizer = self.optimizer.suggest(
@@ -109,6 +115,9 @@ class SupervisorAgent:
             reliability_score=analyzer.reliability_score,
             confidence=analyzer.confidence,
             objective=request.recommendation_objective,
+            gate_pass_count=analyzer.gate_pass_count,
+            gate_fail_count=analyzer.gate_fail_count,
+            overall_acceptance_status=analyzer.overall_acceptance_status,
         )
 
         summaries = [ScenarioSummary(**row) for row in summaries_raw]
@@ -142,6 +151,9 @@ class SupervisorAgent:
                 reliability_score=0.0,
                 confidence="low",
                 objective="lowest_latency",
+                gate_pass_count=0,
+                gate_fail_count=0,
+                overall_acceptance_status="unknown",
             ),
             reasoning_trace=["SupervisorAgent: fallback response returned after workflow failure."],
             artifacts={},
