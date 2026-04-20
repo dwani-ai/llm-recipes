@@ -15,6 +15,7 @@ Standalone product for benchmarking Gemini response modes with:
 - API key input from UI for each run (not persisted)
 - Checkbox mode selection
 - Thinking token budget control (`thinking_token_budget`)
+- Model-aware thinking controls (`thinking_mode`, `thinking_level`, `thinking_token_budget`)
 - Stack selection: `google_genai`, `openai_compat`, `vertex_api`
 - Best known mode defaults preselected:
   - stack: `google_genai`
@@ -307,6 +308,12 @@ TTFT measurement detail:
 
 - For streaming + thinking on `google_genai`, TTFT is measured at the first **final output token** after internal thinking, not at the first internal reasoning chunk.
 - For non-streaming calls, TTFT equals response completion time.
+
+Thinking mode compatibility:
+
+- Gemini 2.5 family: budget-style thinking control (`thinking_mode=budget` + `thinking_token_budget`).
+- Gemini 3.x family: level-style thinking control (`thinking_mode=level` + `thinking_level`).
+- `thinking_mode=auto` selects the compatible control based on model family.
 
 Interpretation guide:
 

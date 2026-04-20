@@ -23,6 +23,8 @@ export type BenchmarkRequest = {
   timeout_s: number;
   mode_selection: ModeSelection;
   thinking_token_budget?: number;
+  thinking_mode?: "auto" | "budget" | "level";
+  thinking_level?: "minimal" | "low" | "medium" | "high" | null;
   prompt_template: string;
   prompt_variables: Record<string, string>;
   vertex_config?: VertexConfig;
@@ -39,6 +41,8 @@ export type ScenarioSummary = {
   model: string;
   mode: string;
   thinking: boolean;
+  thinking_mode: string;
+  thinking_level: string | null;
   thinking_token_budget: number;
   cache_strategy: string;
   prompt_type: string;
@@ -101,6 +105,8 @@ export type DefaultModesResponse = {
     streaming: boolean;
     thinking: boolean;
     thinking_token_budget: number;
+    thinking_mode: "auto" | "budget" | "level";
+    thinking_level: "minimal" | "low" | "medium" | "high" | null;
     implicit_cache: boolean;
     explicit_cache: boolean;
     trials: number;

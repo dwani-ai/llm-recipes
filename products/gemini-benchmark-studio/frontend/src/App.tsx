@@ -25,6 +25,8 @@ type PromptVarRow = { key: string; value: string };
 type CacheStrategy = "none" | "implicit_reuse" | "explicit_cache";
 type CacheIntent = "none" | "implicit_reuse" | "explicit_cache";
 type BenchmarkObjective = "lowest_latency" | "balanced" | "reliability_first";
+type ThinkingMode = "auto" | "budget" | "level";
+type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 type CodeVariation = {
   id: string;
   label: string;
@@ -391,6 +393,34 @@ function toDateTimeLocalString(input: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function modelThinkingCapabilities(modelName: string): { supportsBudget: boolean; supportsLevel: boolean } {
+  const value = modelName.toLowerCase();
+  if (value.startsWith("gemini-3.1") || value.startsWith("gemini-3")) {
+    return { supportsBudget: false, supportsLevel: true };
+  }
+  if (value.startsWith("gemini-2.5")) {
+    return { supportsBudget: true, supportsLevel: false };
+  }
+  return { supportsBudget: true, supportsLevel: false };
+}
+
+function resolveEffectiveThinkingMode(
+  thinkingEnabled: boolean,
+  thinkingMode: ThinkingMode,
+  caps: { supportsBudget: boolean; supportsLevel: boolean }
+): "off" | "budget" | "level" {
+  if (!thinkingEnabled) {
+    return "off";
+  }
+  if (thinkingMode === "auto") {
+    if (caps.supportsLevel && !caps.supportsBudget) {
+      return "level";
+    }
+    return "budget";
+  }
+  return thinkingMode;
+}
+
 export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
@@ -403,6 +433,8 @@ export default function App() {
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
   const [thinkingTokenBudget, setThinkingTokenBudget] = useState(256);
+  const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("budget");
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("medium");
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
   const [selectedPromptPresetId, setSelectedPromptPresetId] = useState("decision_memo");
@@ -448,6 +480,11 @@ export default function App() {
   const [historyCompareA, setHistoryCompareA] = useState("");
   const [historyCompareB, setHistoryCompareB] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const thinkingCaps = useMemo(() => modelThinkingCapabilities(model), [model]);
+  const effectiveThinkingMode = useMemo(
+    () => resolveEffectiveThinkingMode(modeSelection.thinking, thinkingMode, thinkingCaps),
+    [modeSelection.thinking, thinkingMode, thinkingCaps]
+  );
   const modelOptions = useMemo(
     () => STACK_MODEL_OPTIONS[stack] ?? STACK_MODEL_OPTIONS.google_genai,
     [stack]
@@ -483,6 +520,8 @@ export default function App() {
           explicit_cache: data.defaults.explicit_cache,
         });
         setThinkingTokenBudget(data.defaults.thinking_token_budget ?? 256);
+        setThinkingMode(data.defaults.thinking_mode ?? "budget");
+        setThinkingLevel(data.defaults.thinking_level ?? "medium");
         setCacheIntent(
           cacheIntentFromMode({
             streaming: data.defaults.streaming,
@@ -527,6 +566,16 @@ export default function App() {
       setModel(modelOptions[0]);
     }
   }, [model, modelOptions]);
+
+  useEffect(() => {
+    if (thinkingMode === "budget" && !thinkingCaps.supportsBudget) {
+      setThinkingMode("auto");
+      return;
+    }
+    if (thinkingMode === "level" && !thinkingCaps.supportsLevel) {
+      setThinkingMode("auto");
+    }
+  }, [thinkingMode, thinkingCaps]);
 
   const variableMap = useMemo(() => toVariableMap(promptVars), [promptVars]);
 
@@ -580,6 +629,8 @@ export default function App() {
     setModeSelection(sample.recommended.modeSelection);
     setCacheIntent(cacheIntentFromMode(sample.recommended.modeSelection));
     setThinkingTokenBudget(256);
+    setThinkingMode("auto");
+    setThinkingLevel("medium");
     setPromptPreview("");
     setPreviewMissing([]);
     setExactTokenCount(null);
@@ -725,7 +776,17 @@ export default function App() {
       "prompt = prompt_template\nfor k, v in prompt_variables.items():\n    prompt = prompt.replace('{{' + k + '}}', str(v))";
 
     if (stack === "google_genai") {
-      const thinkingBudget = variation.thinking ? String(thinkingTokenBudget) : "0";
+      const variationThinkingMode = resolveEffectiveThinkingMode(
+        variation.thinking,
+        thinkingMode,
+        modelThinkingCapabilities(model)
+      );
+      const thinkingConfigLine =
+        !variation.thinking
+          ? "    'thinking_config': {'thinking_budget': 0}"
+          : variationThinkingMode === "level"
+            ? `    'thinking_config': {'thinking_level': '${thinkingLevel}'}`
+            : `    'thinking_config': {'thinking_budget': ${thinkingTokenBudget}}`;
       const promptPreparation = [
         "shared_prefix = prompt_variables.get('data_context', '')",
         "if " + (variation.cacheStrategy === "implicit_reuse" ? "True" : "False") + ":",
@@ -763,7 +824,7 @@ export default function App() {
         "config = {",
         `    'max_output_tokens': 128,`,
         `    'temperature': 0.2,`,
-        `    'thinking_config': {'thinking_budget': ${thinkingBudget}}`,
+        thinkingConfigLine,
         "}",
         explicitCacheBlock,
         "",
@@ -910,8 +971,14 @@ export default function App() {
     if (!stackCapabilities.explicitCache && modeSelection.explicit_cache) {
       return `${stack} does not support explicit cache in this benchmark path. Use implicit reuse or switch stack.`;
     }
-    if (modeSelection.thinking && thinkingTokenBudget <= 0) {
-      return "Thinking token budget must be greater than 0 when thinking is enabled.";
+    if (modeSelection.thinking && thinkingMode === "budget" && !thinkingCaps.supportsBudget) {
+      return `${model} does not support thinking_mode=budget. Use auto or level mode.`;
+    }
+    if (modeSelection.thinking && thinkingMode === "level" && !thinkingCaps.supportsLevel) {
+      return `${model} does not support thinking_mode=level. Use auto or budget mode.`;
+    }
+    if (modeSelection.thinking && effectiveThinkingMode === "budget" && thinkingTokenBudget <= 0) {
+      return "Thinking token budget must be greater than 0 when budget mode is active.";
     }
     if (!apiKey.trim()) {
       return "API key is required to run benchmarks.";
@@ -938,6 +1005,8 @@ export default function App() {
       timeout_s: 90,
       mode_selection: modeFromCacheIntent(cacheIntent, modeSelection),
       thinking_token_budget: thinkingTokenBudget,
+      thinking_mode: thinkingMode,
+      thinking_level: thinkingLevel,
       prompt_template: templateOverride ?? promptTemplate,
       prompt_variables: variableMap,
       vertex_config:
@@ -978,6 +1047,8 @@ export default function App() {
     };
     setModeSelection(nextMode);
     setThinkingTokenBudget(bestSummary.thinking_token_budget ?? 1024);
+    setThinkingMode((bestSummary.thinking_mode as ThinkingMode) ?? "auto");
+    setThinkingLevel((bestSummary.thinking_level as ThinkingLevel) ?? "medium");
     setCacheIntent(cacheIntentFromMode(nextMode));
     setHighlightedScenarioId(bestSummary.scenario_id);
   }
@@ -1216,6 +1287,37 @@ export default function App() {
             Thinking
           </label>
           <label>
+            Thinking Mode
+            <select
+              value={thinkingMode}
+              disabled={!modeSelection.thinking}
+              onChange={(event) => setThinkingMode(event.target.value as ThinkingMode)}
+            >
+              <option value="auto">auto</option>
+              <option value="budget" disabled={!thinkingCaps.supportsBudget}>
+                budget
+              </option>
+              <option value="level" disabled={!thinkingCaps.supportsLevel}>
+                level
+              </option>
+            </select>
+          </label>
+          {effectiveThinkingMode === "level" ? (
+            <label>
+              Thinking Level
+              <select
+                value={thinkingLevel}
+                disabled={!modeSelection.thinking}
+                onChange={(event) => setThinkingLevel(event.target.value as ThinkingLevel)}
+              >
+                <option value="minimal">minimal</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+          ) : (
+          <label>
             Thinking Token Budget
             <input
               type="number"
@@ -1226,6 +1328,7 @@ export default function App() {
               onChange={(event) => setThinkingTokenBudget(Math.max(0, Number(event.target.value) || 0))}
             />
           </label>
+          )}
           <label>
             Cache Intent
             <select
@@ -1242,7 +1345,11 @@ export default function App() {
         </div>
         <p className="muted">
           Current mode: {modeSelection.streaming ? "streaming" : "non_streaming"} | thinking=
-          {String(modeSelection.thinking)} | thinking_budget={thinkingTokenBudget} | cache={cacheIntent}
+          {String(modeSelection.thinking)} | thinking_mode={effectiveThinkingMode}
+          {effectiveThinkingMode === "level"
+            ? ` | thinking_level=${thinkingLevel}`
+            : ` | thinking_budget=${thinkingTokenBudget}`}{" "}
+          | cache={cacheIntent}
         </p>
       </section>
 
@@ -1688,6 +1795,8 @@ export default function App() {
                   <th>Model</th>
                   <th>Mode</th>
                   <th>Thinking</th>
+                  <th>Thinking Mode</th>
+                  <th>Thinking Level</th>
                   <th>Thinking Budget</th>
                   <th>Cache</th>
                   <th>Prompt Type</th>
@@ -1720,6 +1829,8 @@ export default function App() {
                     <td>{row.model}</td>
                     <td>{row.mode}</td>
                     <td>{String(row.thinking)}</td>
+                    <td>{row.thinking_mode}</td>
+                    <td>{row.thinking_level ?? "n/a"}</td>
                     <td>{row.thinking_token_budget}</td>
                     <td>{row.cache_strategy}</td>
                     <td>{row.prompt_type}</td>

@@ -61,6 +61,8 @@ def _parser() -> argparse.ArgumentParser:
         help="Disable thinking. Default is thinking enabled.",
     )
     parser.add_argument("--thinking-token-budget", type=int, default=1024)
+    parser.add_argument("--thinking-mode", choices=["auto", "budget", "level"], default="auto")
+    parser.add_argument("--thinking-level", choices=["minimal", "low", "medium", "high"], default=None)
     parser.add_argument(
         "--cache-intent",
         choices=["none", "implicit_reuse", "explicit_cache"],
@@ -152,6 +154,8 @@ def main(argv: List[str] | None = None) -> int:
             timeout_s=args.timeout_s,
             mode_selection=mode_selection,
             thinking_token_budget=args.thinking_token_budget,
+            thinking_mode=args.thinking_mode,
+            thinking_level=args.thinking_level,
             prompt_template=args.prompt_template,
             prompt_variables=prompt_variables,
             vertex_config=vertex_config,

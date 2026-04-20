@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.schemas import BenchmarkRequest
+from app.services.thinking_config import resolve_thinking_config
 
 
 def utc_now_iso() -> str:
@@ -46,6 +47,8 @@ class Scenario:
     model: str
     mode: str
     thinking: bool
+    thinking_mode: str
+    thinking_level: Optional[str]
     thinking_token_budget: int
     cache_strategy: str
     prompt_type: str
@@ -59,6 +62,7 @@ class Scenario:
     def scenario_id(self) -> str:
         return (
             f"{self.stack}|{self.model}|{self.mode}|thinking_{self.thinking}|"
+            f"thinking_mode_{self.thinking_mode}|thinking_level_{self.thinking_level}|"
             f"thinking_budget_{self.thinking_token_budget}|cache_{self.cache_strategy}|{self.prompt_type}"
         )
 
@@ -79,10 +83,15 @@ class GoogleGenAIAdapter:
             "max_output_tokens": scenario.max_output_tokens,
             "temperature": scenario.temperature,
         }
-        if scenario.thinking:
-            cfg["thinking_config"] = {"thinking_budget": scenario.thinking_token_budget}
-        else:
-            cfg["thinking_config"] = {"thinking_budget": 0}
+        thinking_config, _, _ = resolve_thinking_config(
+            model=scenario.model,
+            thinking_enabled=scenario.thinking,
+            thinking_mode=scenario.thinking_mode,
+            thinking_token_budget=scenario.thinking_token_budget,
+            thinking_level=scenario.thinking_level,
+        )
+        if thinking_config is not None:
+            cfg["thinking_config"] = thinking_config
         if explicit_cache_name:
             cfg["cached_content"] = explicit_cache_name
         return cfg
@@ -132,6 +141,16 @@ class GoogleGenAIAdapter:
         return getattr(chunk, "text", "") or ""
 
     def run_once(self, scenario: Scenario, prompt_cfg: Dict[str, str]) -> Dict[str, Any]:
+        _, thinking_error, effective_thinking_mode = resolve_thinking_config(
+            model=scenario.model,
+            thinking_enabled=scenario.thinking,
+            thinking_mode=scenario.thinking_mode,
+            thinking_token_budget=scenario.thinking_token_budget,
+            thinking_level=scenario.thinking_level,
+        )
+        if thinking_error is not None:
+            return {"status": "unsupported", "reason": thinking_error}
+
         explicit_cache_name = None
         if scenario.cache_strategy == "explicit_cache":
             explicit_cache_name, cache_error = self._ensure_explicit_cache(scenario, prompt_cfg)
@@ -142,8 +161,12 @@ class GoogleGenAIAdapter:
         contents = [{"role": "user", "parts": [{"text": prompt.strip()}]}]
         config = self._config(scenario, explicit_cache_name)
         if scenario.mode == "streaming":
-            return self._streaming(scenario, contents, config)
-        return self._non_streaming(scenario, contents, config)
+            output = self._streaming(scenario, contents, config)
+        else:
+            output = self._non_streaming(scenario, contents, config)
+        output["thinking_mode"] = effective_thinking_mode
+        output["thinking_level"] = scenario.thinking_level if effective_thinking_mode == "level" else None
+        return output
 
     def _streaming(self, scenario: Scenario, contents: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
         start = time.perf_counter()
@@ -341,6 +364,8 @@ class BenchmarkRunner:
                     model=model,
                     mode=mode,
                     thinking=thinking,
+                    thinking_mode=request.thinking_mode,
+                    thinking_level=request.thinking_level,
                     cache_strategy=cache,
                     prompt_type=prompt_type,
                     trials=request.trials,
@@ -408,6 +433,8 @@ class BenchmarkRunner:
                     "model": first["model"],
                     "mode": first["mode"],
                     "thinking": first["thinking"],
+                    "thinking_mode": first.get("thinking_mode", "off"),
+                    "thinking_level": first.get("thinking_level"),
                     "thinking_token_budget": first["thinking_token_budget"],
                     "cache_strategy": first["cache_strategy"],
                     "prompt_type": first["prompt_type"],
@@ -506,6 +533,8 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_mode": scenario.thinking_mode,
+                        "thinking_level": scenario.thinking_level,
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
@@ -533,6 +562,8 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_mode": scenario.thinking_mode,
+                        "thinking_level": scenario.thinking_level,
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
@@ -571,6 +602,8 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_mode": payload.get("thinking_mode", scenario.thinking_mode),
+                        "thinking_level": payload.get("thinking_level", scenario.thinking_level),
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,

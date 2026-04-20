@@ -115,6 +115,8 @@ class BenchmarkRequest(BaseModel):
     timeout_s: int = Field(default=90, ge=10, le=300)
     mode_selection: ModeSelection = Field(default_factory=ModeSelection)
     thinking_token_budget: int = Field(default=1024, ge=0, le=8192)
+    thinking_mode: Literal["auto", "budget", "level"] = Field(default="auto")
+    thinking_level: Optional[Literal["minimal", "low", "medium", "high"]] = None
     prompt_template: str = Field(default=DEFAULT_PROMPT_TEMPLATE)
     prompt_variables: Dict[str, str] = Field(default_factory=dict)
     vertex_config: Optional[VertexConfig] = None
@@ -133,6 +135,8 @@ class ScenarioSummary(BaseModel):
     model: str
     mode: str
     thinking: bool
+    thinking_mode: str = "off"
+    thinking_level: Optional[str] = None
     thinking_token_budget: int
     cache_strategy: str
     prompt_type: str

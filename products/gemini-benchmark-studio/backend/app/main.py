@@ -23,6 +23,7 @@ from app.schemas import (
 from app.services.data_upload import extract_context_from_bytes
 from app.services.history_store import BenchmarkHistoryStore
 from app.services.prompt_template import render_prompt_template
+from app.services.thinking_config import resolve_thinking_config
 from app.services.token_counter import TokenCountError, mode_aware_token_breakdown
 
 
@@ -46,6 +47,20 @@ def _validate_benchmark_request(request: BenchmarkRequest) -> None:
         raise HTTPException(status_code=400, detail="api_key is required for google_genai/openai_compat stacks")
     if "vertex_api" in request.stacks and request.vertex_config is None:
         raise HTTPException(status_code=400, detail="vertex_config is required for vertex_api stack")
+    if request.mode_selection.thinking:
+        for model in request.models:
+            _, thinking_error, _ = resolve_thinking_config(
+                model=model,
+                thinking_enabled=True,
+                thinking_mode=request.thinking_mode,
+                thinking_token_budget=request.thinking_token_budget,
+                thinking_level=request.thinking_level,
+            )
+            if thinking_error is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"thinking configuration invalid for model '{model}': {thinking_error}",
+                )
     if request.schedule_enabled:
         if request.schedule_start_at is None:
             raise HTTPException(status_code=400, detail="schedule_start_at is required when schedule_enabled is true")

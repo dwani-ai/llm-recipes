@@ -16,6 +16,8 @@ def best_mode_defaults() -> Dict[str, object]:
         "streaming": False,
         "thinking": True,
         "thinking_token_budget": 256,
+        "thinking_mode": "budget",
+        "thinking_level": "medium",
         "implicit_cache": False,
         "explicit_cache": True,
         "trials": 10,
