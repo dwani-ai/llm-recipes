@@ -23,6 +23,7 @@ from app.schemas import (
 from app.services.data_upload import extract_context_from_bytes
 from app.services.history_store import BenchmarkHistoryStore
 from app.services.prompt_template import render_prompt_template
+from app.services.thinking_config import resolve_thinking_config
 from app.services.token_counter import TokenCountError, mode_aware_token_breakdown
 
 
@@ -46,6 +47,20 @@ def _validate_benchmark_request(request: BenchmarkRequest) -> None:
         raise HTTPException(status_code=400, detail="api_key is required for google_genai/openai_compat stacks")
     if "vertex_api" in request.stacks and request.vertex_config is None:
         raise HTTPException(status_code=400, detail="vertex_config is required for vertex_api stack")
+    if request.mode_selection.thinking:
+        for model in request.models:
+            _, thinking_error, _ = resolve_thinking_config(
+                model=model,
+                thinking_enabled=True,
+                thinking_mode=request.thinking_mode,
+                thinking_token_budget=request.thinking_token_budget,
+                thinking_level=request.thinking_level,
+            )
+            if thinking_error is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"thinking configuration invalid for model '{model}': {thinking_error}",
+                )
     if request.schedule_enabled:
         if request.schedule_start_at is None:
             raise HTTPException(status_code=400, detail="schedule_start_at is required when schedule_enabled is true")
@@ -143,7 +158,15 @@ def run_benchmark(request: BenchmarkRequest) -> BenchmarkResponse:
         _save_run_history(request, result.response)
         return result.response
     except Exception as exc:
-        return supervisor.fallback_response(str(exc))
+        fallback = supervisor.fallback_response(str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Benchmark workflow failed.",
+                "error": str(exc),
+                "fallback": fallback.model_dump(),
+            },
+        ) from exc
 
 
 @app.post("/api/prompt/optimize-and-benchmark", response_model=PromptOptimizeBenchmarkResponse)
@@ -153,12 +176,21 @@ def optimize_and_benchmark(request: PromptOptimizeBenchmarkRequest) -> PromptOpt
     benchmark_request = request.benchmark
     if request.use_winner_template:
         benchmark_request = request.benchmark.model_copy(update={"prompt_template": optimization.winner_template})
+    benchmark_error = None
+    benchmark_failed = False
     try:
         benchmark_result = supervisor.run(benchmark_request).response
         _save_run_history(benchmark_request, benchmark_result)
     except Exception as exc:
         benchmark_result = supervisor.fallback_response(str(exc))
-    return PromptOptimizeBenchmarkResponse(optimization=optimization, benchmark=benchmark_result)
+        benchmark_error = str(exc)
+        benchmark_failed = True
+    return PromptOptimizeBenchmarkResponse(
+        optimization=optimization,
+        benchmark=benchmark_result,
+        benchmark_failed=benchmark_failed,
+        benchmark_error=benchmark_error,
+    )
 
 
 @app.get("/api/benchmark/history", response_model=RunHistoryResponse)

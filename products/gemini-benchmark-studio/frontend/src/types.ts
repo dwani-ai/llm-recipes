@@ -12,6 +12,29 @@ export type VertexConfig = {
   access_token?: string;
 };
 
+export type EvaluationRubricCriterion = {
+  key: string;
+  label: string;
+  description: string;
+  weight: number;
+};
+
+export type AcceptanceTierThreshold = {
+  min_accuracy_score: number;
+  max_ttft_p50_s?: number | null;
+};
+
+export type EvaluationConfig = {
+  judge_stack: "google_genai" | "openai_compat" | "vertex_api";
+  judge_model: string;
+  rubric_criteria: EvaluationRubricCriterion[];
+  tier_thresholds: {
+    critical: AcceptanceTierThreshold;
+    standard: AcceptanceTierThreshold;
+    exploratory: AcceptanceTierThreshold;
+  };
+};
+
 export type BenchmarkRequest = {
   api_key?: string;
   stacks: string[];
@@ -23,11 +46,16 @@ export type BenchmarkRequest = {
   timeout_s: number;
   mode_selection: ModeSelection;
   thinking_token_budget?: number;
+  thinking_mode?: "auto" | "budget" | "level";
+  thinking_level?: "minimal" | "low" | "medium" | "high" | null;
   prompt_template: string;
   prompt_variables: Record<string, string>;
   vertex_config?: VertexConfig;
   include_long_context: boolean;
   recommendation_objective?: "lowest_latency" | "balanced" | "reliability_first";
+  acceptance_tier?: "critical" | "standard" | "exploratory";
+  evaluation_enabled?: boolean;
+  evaluation?: EvaluationConfig;
   schedule_enabled?: boolean;
   schedule_start_at?: string;
   schedule_window_minutes?: number;
@@ -39,6 +67,8 @@ export type ScenarioSummary = {
   model: string;
   mode: string;
   thinking: boolean;
+  thinking_mode: string;
+  thinking_level: string | null;
   thinking_token_budget: number;
   cache_strategy: string;
   prompt_type: string;
@@ -50,12 +80,21 @@ export type ScenarioSummary = {
   ttft_p95_s: number | null;
   e2e_p50_s: number | null;
   tokens_per_s_avg: number | null;
+  accuracy_score: number | null;
+  accuracy_p50: number | null;
+  accuracy_p95: number | null;
+  evaluation_samples: number;
+  acceptance_tier: "critical" | "standard" | "exploratory";
+  acceptance_passed: boolean | null;
+  acceptance_reason: string | null;
   ttft_definition: string;
   note: string | null;
 };
 
 export type BenchmarkResponse = {
   run_id: string;
+  status: "ok" | "failed";
+  error_message?: string | null;
   rendered_prompt: string;
   summaries: ScenarioSummary[];
   recommendation: {
@@ -69,6 +108,7 @@ export type BenchmarkResponse = {
       ttft_p95_s: number | null;
       e2e_p50_s: number | null;
       tokens_per_s_avg: number | null;
+      accuracy_score: number | null;
       success_rate: number;
       error_rate: number;
       unsupported_rate: number;
@@ -80,6 +120,9 @@ export type BenchmarkResponse = {
     reliability_score: number;
     confidence: string;
     objective: string;
+    gate_pass_count: number;
+    gate_fail_count: number;
+    overall_acceptance_status: "passed" | "failed" | "unknown";
   };
   reasoning_trace: string[];
   artifacts: Record<string, string>;
@@ -101,6 +144,8 @@ export type DefaultModesResponse = {
     streaming: boolean;
     thinking: boolean;
     thinking_token_budget: number;
+    thinking_mode: "auto" | "budget" | "level";
+    thinking_level: "minimal" | "low" | "medium" | "high" | null;
     implicit_cache: boolean;
     explicit_cache: boolean;
     trials: number;
@@ -144,6 +189,8 @@ export type PromptOptimizeBenchmarkRequest = {
 export type PromptOptimizeBenchmarkResponse = {
   optimization: PromptOptimizationResponse;
   benchmark: BenchmarkResponse;
+  benchmark_failed: boolean;
+  benchmark_error?: string | null;
 };
 
 export type PromptTokenCountRequest = {

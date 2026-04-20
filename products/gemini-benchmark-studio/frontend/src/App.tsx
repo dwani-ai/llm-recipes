@@ -25,6 +25,10 @@ type PromptVarRow = { key: string; value: string };
 type CacheStrategy = "none" | "implicit_reuse" | "explicit_cache";
 type CacheIntent = "none" | "implicit_reuse" | "explicit_cache";
 type BenchmarkObjective = "lowest_latency" | "balanced" | "reliability_first";
+type AcceptanceTier = "critical" | "standard" | "exploratory";
+type JudgeStack = "google_genai" | "openai_compat" | "vertex_api";
+type ThinkingMode = "auto" | "budget" | "level";
+type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 type CodeVariation = {
   id: string;
   label: string;
@@ -42,6 +46,36 @@ type SampleUseCase = {
     model: string;
     modeSelection: ModeSelection;
   };
+};
+
+const STACK_MODEL_OPTIONS: Record<string, string[]> = {
+  google_genai: [
+    "gemini-3.1-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro",
+    "gemini-3-flash",
+    "gemini-3-flash-lite",
+    "gemini-3-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+  ],
+  openai_compat: [
+    "gemini-3.1-flash",
+    "gemini-3-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+  ],
+  vertex_api: [
+    "gemini-3.1-flash",
+    "gemini-3-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+  ],
+};
+type PromptTemplatePreset = {
+  id: string;
+  title: string;
+  template: string;
 };
 
 const SAMPLE_USE_CASES: SampleUseCase[] = [
@@ -303,6 +337,69 @@ Findings:
   },
 ];
 
+const BUDGET_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
+  {
+    id: "budget_decision_memo",
+    title: "Budget Memo (2.5 default)",
+    template:
+      "Using {{dataset_name}}, produce a concise but rigorous decision memo for {{goal}} within a limited reasoning budget. Return: (1) top findings, (2) major trade-offs, (3) prioritized actions, and (4) measurable success criteria.",
+  },
+  {
+    id: "budget_root_cause",
+    title: "Budget Root Cause + Risks",
+    template:
+      "From {{dataset_name}}, perform root-cause analysis for {{goal}} optimized for budgeted reasoning. Return: (1) high-impact root causes, (2) risk map with likelihood/severity, (3) mitigation plan with owners, and (4) measurable checkpoints.",
+  },
+  {
+    id: "budget_exec_roadmap",
+    title: "Budget Executive Brief",
+    template:
+      "Use {{dataset_name}} to generate an executive brief for {{goal}} with explicit assumptions and concise justification. Return: (1) current-state diagnosis, (2) strategic options with trade-offs, (3) recommended phased roadmap, and (4) KPI targets.",
+  },
+];
+
+const LEVEL_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
+  {
+    id: "level_deep_dossier",
+    title: "Deep Dossier (3.x default)",
+    template:
+      "Using {{dataset_name}}, generate a deep analytical dossier for {{goal}}. Return: (1) layered findings with evidence, (2) trade-off matrix, (3) phased action plan with contingencies, and (4) KPI tree with leading/lagging indicators.",
+  },
+  {
+    id: "level_counterfactuals",
+    title: "Counterfactual Scenario Plan",
+    template:
+      "From {{dataset_name}}, build a scenario-based strategy for {{goal}} using deep thinking. Return: (1) baseline diagnosis, (2) best/base/worst-case counterfactuals, (3) risk controls per scenario, and (4) trigger metrics for plan shifts.",
+  },
+  {
+    id: "level_architecture_review",
+    title: "Architecture + Governance Review",
+    template:
+      "Use {{dataset_name}} to produce a thorough architecture and governance review for {{goal}}. Return: (1) structural bottlenecks, (2) governance gaps, (3) remediation roadmap by phase/owner, and (4) compliance and reliability metrics.",
+  },
+];
+
+const DEFAULT_EVALUATION_RUBRIC = [
+  {
+    key: "factuality",
+    label: "Factuality",
+    description: "Output aligns with provided data/context and avoids unsupported claims.",
+    weight: 0.4,
+  },
+  {
+    key: "completeness",
+    label: "Completeness",
+    description: "Output addresses the requested goal and includes required deliverables.",
+    weight: 0.35,
+  },
+  {
+    key: "policy_adherence",
+    label: "Policy Adherence",
+    description: "Output follows safety/compliance constraints and formatting requirements.",
+    weight: 0.25,
+  },
+];
+
 function toVariableMap(rows: PromptVarRow[]): Record<string, string> {
   const data: Record<string, string> = {};
   for (const row of rows) {
@@ -340,6 +437,34 @@ function toDateTimeLocalString(input: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function modelThinkingCapabilities(modelName: string): { supportsBudget: boolean; supportsLevel: boolean } {
+  const value = modelName.toLowerCase();
+  if (value.startsWith("gemini-3.1") || value.startsWith("gemini-3")) {
+    return { supportsBudget: false, supportsLevel: true };
+  }
+  if (value.startsWith("gemini-2.5")) {
+    return { supportsBudget: true, supportsLevel: false };
+  }
+  return { supportsBudget: true, supportsLevel: false };
+}
+
+function resolveEffectiveThinkingMode(
+  thinkingEnabled: boolean,
+  thinkingMode: ThinkingMode,
+  caps: { supportsBudget: boolean; supportsLevel: boolean }
+): "off" | "budget" | "level" {
+  if (!thinkingEnabled) {
+    return "off";
+  }
+  if (thinkingMode === "auto") {
+    if (caps.supportsLevel && !caps.supportsBudget) {
+      return "level";
+    }
+    return "budget";
+  }
+  return thinkingMode;
+}
+
 export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
@@ -351,9 +476,22 @@ export default function App() {
   const [trials, setTrials] = useState(10);
   const [warmupTrials, setWarmupTrials] = useState(2);
   const [modeSelection, setModeSelection] = useState<ModeSelection>(DEFAULT_MODE_SELECTION);
-  const [thinkingTokenBudget, setThinkingTokenBudget] = useState(1024);
+  const [thinkingTokenBudget, setThinkingTokenBudget] = useState(256);
+  const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("budget");
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("medium");
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
+  const [evaluationEnabled, setEvaluationEnabled] = useState(false);
+  const [acceptanceTier, setAcceptanceTier] = useState<AcceptanceTier>("standard");
+  const [judgeStack, setJudgeStack] = useState<JudgeStack>("google_genai");
+  const [judgeModel, setJudgeModel] = useState("gemini-2.5-flash");
+  const [criticalAccuracyThreshold, setCriticalAccuracyThreshold] = useState(0.85);
+  const [standardAccuracyThreshold, setStandardAccuracyThreshold] = useState(0.75);
+  const [exploratoryAccuracyThreshold, setExploratoryAccuracyThreshold] = useState(0.65);
+  const [criticalMaxTtft, setCriticalMaxTtft] = useState("");
+  const [standardMaxTtft, setStandardMaxTtft] = useState("");
+  const [exploratoryMaxTtft, setExploratoryMaxTtft] = useState("");
+  const [selectedPromptPresetId, setSelectedPromptPresetId] = useState("budget_decision_memo");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleStartLocal, setScheduleStartLocal] = useState(
     toDateTimeLocalString(new Date(Date.now() + 5 * 60 * 1000))
@@ -365,9 +503,13 @@ export default function App() {
   const [optimizationVariantCount, setOptimizationVariantCount] = useState(3);
   const [lockedPhrases, setLockedPhrases] = useState("");
   const [promptVars, setPromptVars] = useState<PromptVarRow[]>([
-    { key: "dataset_name", value: "customer_support_logs" },
-    { key: "goal", value: "reduce first token latency while preserving answer quality" },
-    { key: "data_context", value: "Multilingual user support queries over the last 30 days." },
+    { key: "dataset_name", value: "security_control_evidence_repository" },
+    { key: "goal", value: "prepare SOC2 gap-closure plan with explicit remediation milestones" },
+    {
+      key: "data_context",
+      value:
+        "Large static corpus containing policy docs, control test logs, auditor notes, prior incidents, ownership maps, and remediation history.",
+    },
   ]);
   const [promptPreview, setPromptPreview] = useState("");
   const [previewMissing, setPreviewMissing] = useState<string[]>([]);
@@ -392,6 +534,23 @@ export default function App() {
   const [historyCompareA, setHistoryCompareA] = useState("");
   const [historyCompareB, setHistoryCompareB] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const thinkingCaps = useMemo(() => modelThinkingCapabilities(model), [model]);
+  const effectiveThinkingMode = useMemo(
+    () => resolveEffectiveThinkingMode(modeSelection.thinking, thinkingMode, thinkingCaps),
+    [modeSelection.thinking, thinkingMode, thinkingCaps]
+  );
+  const modelOptions = useMemo(
+    () => STACK_MODEL_OPTIONS[stack] ?? STACK_MODEL_OPTIONS.google_genai,
+    [stack]
+  );
+  const currentPromptPresets = useMemo(
+    () => (thinkingCaps.supportsLevel ? LEVEL_THINKING_PROMPT_PRESETS : BUDGET_THINKING_PROMPT_PRESETS),
+    [thinkingCaps]
+  );
+  const promptPresetFamilyLabel = useMemo(
+    () => (thinkingCaps.supportsLevel ? "Gemini 3.x level-aware presets" : "Gemini 2.5 budget-aware presets"),
+    [thinkingCaps]
+  );
   const stackCapabilities = useMemo(() => {
     if (stack === "google_genai") {
       return { thinking: true, explicitCache: true, note: null as string | null };
@@ -409,6 +568,14 @@ export default function App() {
       note: "vertex_api OpenAI endpoint path has limited thinking/explicit cache controls.",
     };
   }, [stack]);
+  const selectedCacheStrategies = useMemo<CacheStrategy[]>(() => {
+    if (cacheIntent === "none") {
+      return ["none"];
+    }
+    return [cacheIntent];
+  }, [cacheIntent]);
+  const plannedScenarioCount = selectedCacheStrategies.length * 2;
+  const plannedExecutionCount = plannedScenarioCount * (trials + warmupTrials);
 
   useEffect(() => {
     void fetchDefaultModes()
@@ -422,7 +589,9 @@ export default function App() {
           implicit_cache: data.defaults.implicit_cache,
           explicit_cache: data.defaults.explicit_cache,
         });
-        setThinkingTokenBudget(data.defaults.thinking_token_budget ?? 1024);
+        setThinkingTokenBudget(data.defaults.thinking_token_budget ?? 256);
+        setThinkingMode(data.defaults.thinking_mode ?? "budget");
+        setThinkingLevel(data.defaults.thinking_level ?? "medium");
         setCacheIntent(
           cacheIntentFromMode({
             streaming: data.defaults.streaming,
@@ -461,6 +630,28 @@ export default function App() {
       return next;
     });
   }, [stackCapabilities]);
+
+  useEffect(() => {
+    if (modelOptions.length > 0 && !modelOptions.includes(model)) {
+      setModel(modelOptions[0]);
+    }
+  }, [model, modelOptions]);
+
+  useEffect(() => {
+    if (thinkingMode === "budget" && !thinkingCaps.supportsBudget) {
+      setThinkingMode("auto");
+      return;
+    }
+    if (thinkingMode === "level" && !thinkingCaps.supportsLevel) {
+      setThinkingMode("auto");
+    }
+  }, [thinkingMode, thinkingCaps]);
+
+  useEffect(() => {
+    if (!currentPromptPresets.some((item) => item.id === selectedPromptPresetId)) {
+      setSelectedPromptPresetId(currentPromptPresets[0]?.id ?? "");
+    }
+  }, [currentPromptPresets, selectedPromptPresetId]);
 
   const variableMap = useMemo(() => toVariableMap(promptVars), [promptVars]);
 
@@ -513,12 +704,22 @@ export default function App() {
     setModel(sample.recommended.model);
     setModeSelection(sample.recommended.modeSelection);
     setCacheIntent(cacheIntentFromMode(sample.recommended.modeSelection));
-    setThinkingTokenBudget(1024);
+    setThinkingTokenBudget(256);
+    setThinkingMode("auto");
+    setThinkingLevel("medium");
     setPromptPreview("");
     setPreviewMissing([]);
     setExactTokenCount(null);
     setTokenBreakdown([]);
     setTokenCountNote(null);
+  }
+
+  function applyPromptPreset() {
+    const preset = currentPromptPresets.find((item) => item.id === selectedPromptPresetId);
+    if (!preset) {
+      return;
+    }
+    setPromptTemplate(preset.template);
   }
 
   async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -592,6 +793,15 @@ export default function App() {
 
   async function handleExactTokenCount() {
     setError(null);
+    if (stack === "vertex_api") {
+      if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
+        setError("Vertex Project ID, Location, and Endpoint ID are required for vertex_api.");
+        return;
+      }
+    } else if (!apiKey.trim()) {
+      setError("API key is required for token counting on this stack.");
+      return;
+    }
     setIsCountingTokens(true);
     try {
       const response = await fetchExactTokenCount({
@@ -628,9 +838,7 @@ export default function App() {
   }
 
   function buildCodeVariations(): CodeVariation[] {
-    const cacheStrategies: CacheStrategy[] =
-      cacheIntent === "none" ? ["none"] : [cacheIntent];
-    return cacheStrategies.map((cacheStrategy) => {
+    return selectedCacheStrategies.map((cacheStrategy) => {
       const modeLabel = modeSelection.streaming ? "streaming" : "non_streaming";
       const thinkingLabel = modeSelection.thinking ? "thinking_on" : "thinking_off";
       return {
@@ -651,7 +859,17 @@ export default function App() {
       "prompt = prompt_template\nfor k, v in prompt_variables.items():\n    prompt = prompt.replace('{{' + k + '}}', str(v))";
 
     if (stack === "google_genai") {
-      const thinkingBudget = variation.thinking ? String(thinkingTokenBudget) : "0";
+      const variationThinkingMode = resolveEffectiveThinkingMode(
+        variation.thinking,
+        thinkingMode,
+        modelThinkingCapabilities(model)
+      );
+      const thinkingConfigLine =
+        !variation.thinking
+          ? "    'thinking_config': {'thinking_budget': 0}"
+          : variationThinkingMode === "level"
+            ? `    'thinking_config': {'thinking_level': '${thinkingLevel}'}`
+            : `    'thinking_config': {'thinking_budget': ${thinkingTokenBudget}}`;
       const promptPreparation = [
         "shared_prefix = prompt_variables.get('data_context', '')",
         "if " + (variation.cacheStrategy === "implicit_reuse" ? "True" : "False") + ":",
@@ -689,7 +907,7 @@ export default function App() {
         "config = {",
         `    'max_output_tokens': 128,`,
         `    'temperature': 0.2,`,
-        `    'thinking_config': {'thinking_budget': ${thinkingBudget}}`,
+        thinkingConfigLine,
         "}",
         explicitCacheBlock,
         "",
@@ -824,6 +1042,25 @@ export default function App() {
   }
 
   function validateRunInputs(): string | null {
+    if (evaluationEnabled && !judgeModel.trim()) {
+      return "Judge model is required when evaluation is enabled.";
+    }
+    if (evaluationEnabled && criticalAccuracyThreshold < standardAccuracyThreshold) {
+      return "Critical accuracy threshold should be >= standard threshold.";
+    }
+    if (evaluationEnabled && standardAccuracyThreshold < exploratoryAccuracyThreshold) {
+      return "Standard accuracy threshold should be >= exploratory threshold.";
+    }
+    if (evaluationEnabled && judgeStack !== "vertex_api" && !apiKey.trim()) {
+      return "API key is required when evaluation judge stack is google_genai or openai_compat.";
+    }
+    if (
+      evaluationEnabled &&
+      judgeStack === "vertex_api" &&
+      (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim())
+    ) {
+      return "Vertex judge stack requires Project ID, Location, and Endpoint ID.";
+    }
     if (stack === "vertex_api") {
       if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
         return "Vertex Project ID, Location, and Endpoint ID are required for vertex_api.";
@@ -836,8 +1073,14 @@ export default function App() {
     if (!stackCapabilities.explicitCache && modeSelection.explicit_cache) {
       return `${stack} does not support explicit cache in this benchmark path. Use implicit reuse or switch stack.`;
     }
-    if (modeSelection.thinking && thinkingTokenBudget <= 0) {
-      return "Thinking token budget must be greater than 0 when thinking is enabled.";
+    if (modeSelection.thinking && thinkingMode === "budget" && !thinkingCaps.supportsBudget) {
+      return `${model} does not support thinking_mode=budget. Use auto or level mode.`;
+    }
+    if (modeSelection.thinking && thinkingMode === "level" && !thinkingCaps.supportsLevel) {
+      return `${model} does not support thinking_mode=level. Use auto or budget mode.`;
+    }
+    if (modeSelection.thinking && effectiveThinkingMode === "budget" && thinkingTokenBudget <= 0) {
+      return "Thinking token budget must be greater than 0 when budget mode is active.";
     }
     if (!apiKey.trim()) {
       return "API key is required to run benchmarks.";
@@ -849,6 +1092,8 @@ export default function App() {
   }
 
   function buildBenchmarkPayload(templateOverride?: string): BenchmarkRequest {
+    const parseMaxTtft = (value: string): number | null =>
+      value.trim() ? Math.max(0, Number(value) || 0) || null : null;
     const scheduleStartIso =
       scheduleEnabled && scheduleStartLocal
         ? new Date(scheduleStartLocal).toISOString()
@@ -864,6 +1109,8 @@ export default function App() {
       timeout_s: 90,
       mode_selection: modeFromCacheIntent(cacheIntent, modeSelection),
       thinking_token_budget: thinkingTokenBudget,
+      thinking_mode: thinkingMode,
+      thinking_level: thinkingLevel,
       prompt_template: templateOverride ?? promptTemplate,
       prompt_variables: variableMap,
       vertex_config:
@@ -877,6 +1124,27 @@ export default function App() {
           : undefined,
       include_long_context: true,
       recommendation_objective: benchmarkObjective,
+      acceptance_tier: acceptanceTier,
+      evaluation_enabled: evaluationEnabled,
+      evaluation: {
+        judge_stack: judgeStack,
+        judge_model: judgeModel.trim() || "gemini-2.5-flash",
+        rubric_criteria: DEFAULT_EVALUATION_RUBRIC,
+        tier_thresholds: {
+          critical: {
+            min_accuracy_score: criticalAccuracyThreshold,
+            max_ttft_p50_s: parseMaxTtft(criticalMaxTtft),
+          },
+          standard: {
+            min_accuracy_score: standardAccuracyThreshold,
+            max_ttft_p50_s: parseMaxTtft(standardMaxTtft),
+          },
+          exploratory: {
+            min_accuracy_score: exploratoryAccuracyThreshold,
+            max_ttft_p50_s: parseMaxTtft(exploratoryMaxTtft),
+          },
+        },
+      },
       schedule_enabled: scheduleEnabled,
       schedule_start_at: scheduleStartIso,
       schedule_window_minutes: 15,
@@ -904,6 +1172,8 @@ export default function App() {
     };
     setModeSelection(nextMode);
     setThinkingTokenBudget(bestSummary.thinking_token_budget ?? 1024);
+    setThinkingMode((bestSummary.thinking_mode as ThinkingMode) ?? "auto");
+    setThinkingLevel((bestSummary.thinking_level as ThinkingLevel) ?? "medium");
     setCacheIntent(cacheIntentFromMode(nextMode));
     setHighlightedScenarioId(bestSummary.scenario_id);
   }
@@ -951,6 +1221,13 @@ export default function App() {
       setLastOptimizeBenchmarkTemplateAfter(combined.optimization.winner_template);
       setPromptTemplate(combined.optimization.winner_template);
       setResult(combined.benchmark);
+      if (combined.benchmark_failed) {
+        setError(
+          combined.benchmark_error
+            ? `Benchmark phase failed after optimization: ${combined.benchmark_error}`
+            : "Benchmark phase failed after optimization."
+        );
+      }
       await refreshHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Optimize + benchmark failed");
@@ -982,6 +1259,73 @@ export default function App() {
 
   const bestRankedScenario = result?.recommendation.ranked_scenarios?.[0] ?? null;
   const runnerUpScenario = result?.recommendation.ranked_scenarios?.[1] ?? null;
+  const parseOptionalNumber = (value: string): number | null => {
+    const parsed = Number(value);
+    if (!value.trim() || Number.isNaN(parsed) || parsed <= 0) {
+      return null;
+    }
+    return parsed;
+  };
+  const thresholdByTier = (tier: AcceptanceTier): { minAccuracy: number; maxTtft: number | null } => {
+    if (tier === "critical") {
+      return { minAccuracy: criticalAccuracyThreshold, maxTtft: parseOptionalNumber(criticalMaxTtft) };
+    }
+    if (tier === "exploratory") {
+      return { minAccuracy: exploratoryAccuracyThreshold, maxTtft: parseOptionalNumber(exploratoryMaxTtft) };
+    }
+    return { minAccuracy: standardAccuracyThreshold, maxTtft: parseOptionalNumber(standardMaxTtft) };
+  };
+  const acceptanceReportRows = useMemo(() => {
+    if (!result) {
+      return [];
+    }
+    const rows = result.summaries.map((row) => {
+      const tier = row.acceptance_tier ?? "standard";
+      const thresholds = thresholdByTier(tier);
+      const accuracy = row.accuracy_score;
+      const accuracyDelta = accuracy === null ? null : accuracy - thresholds.minAccuracy;
+      const ttft = row.ttft_p50_s;
+      const ttftDelta =
+        thresholds.maxTtft === null || ttft === null ? null : ttft - thresholds.maxTtft;
+      return {
+        scenario_id: row.scenario_id,
+        tier,
+        passed: row.acceptance_passed,
+        accuracy,
+        minAccuracy: thresholds.minAccuracy,
+        accuracyDelta,
+        ttft,
+        maxTtft: thresholds.maxTtft,
+        ttftDelta,
+        reason: row.acceptance_reason ?? row.note ?? "n/a",
+      };
+    });
+    rows.sort((a, b) => {
+      const aPass = a.passed === true ? 1 : 0;
+      const bPass = b.passed === true ? 1 : 0;
+      if (aPass !== bPass) {
+        return aPass - bPass;
+      }
+      return a.scenario_id.localeCompare(b.scenario_id);
+    });
+    return rows;
+  }, [
+    result,
+    criticalAccuracyThreshold,
+    standardAccuracyThreshold,
+    exploratoryAccuracyThreshold,
+    criticalMaxTtft,
+    standardMaxTtft,
+    exploratoryMaxTtft,
+  ]);
+  const hasAcceptanceReportData = acceptanceReportRows.some((row) => row.passed !== null);
+  const ttftDefinitionsInRun = useMemo(() => {
+    if (!result) {
+      return [];
+    }
+    return Array.from(new Set(result.summaries.map((row) => row.ttft_definition).filter(Boolean)));
+  }, [result]);
+  const hasMixedTtftDefinitions = ttftDefinitionsInRun.length > 1;
   const historyA = history.find((item) => item.run_id === historyCompareA);
   const historyB = history.find((item) => item.run_id === historyCompareB);
 
@@ -996,12 +1340,16 @@ export default function App() {
         <h2>Run Settings</h2>
         <div className="grid">
           <label>
-            API Key
+            API Key {stack === "vertex_api" ? "(optional with ADC)" : ""}
             <input
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder="Enter Gemini API key"
+              placeholder={
+                stack === "vertex_api"
+                  ? "Optional: leave blank to use ADC or provide access token below"
+                  : "Enter Gemini API key"
+              }
             />
           </label>
           <label>
@@ -1014,7 +1362,16 @@ export default function App() {
           </label>
           <label>
             Model
-            <input value={model} onChange={(event) => setModel(event.target.value)} />
+            <select value={model} onChange={(event) => setModel(event.target.value)}>
+              {modelOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+              {!modelOptions.includes(model) && (
+                <option value={model}>{model}</option>
+              )}
+            </select>
           </label>
           <label>
             Trials
@@ -1050,6 +1407,47 @@ export default function App() {
           <label className="inline-toggle">
             <input
               type="checkbox"
+              checked={evaluationEnabled}
+              onChange={(event) => setEvaluationEnabled(event.target.checked)}
+            />
+            Enable accuracy evaluation
+          </label>
+          <label>
+            Acceptance Tier
+            <select
+              value={acceptanceTier}
+              disabled={!evaluationEnabled}
+              onChange={(event) => setAcceptanceTier(event.target.value as AcceptanceTier)}
+            >
+              <option value="critical">critical</option>
+              <option value="standard">standard</option>
+              <option value="exploratory">exploratory</option>
+            </select>
+          </label>
+          <label>
+            Judge Stack
+            <select
+              value={judgeStack}
+              disabled={!evaluationEnabled}
+              onChange={(event) => setJudgeStack(event.target.value as JudgeStack)}
+            >
+              <option value="google_genai">google_genai</option>
+              <option value="openai_compat">openai_compat</option>
+              <option value="vertex_api">vertex_api</option>
+            </select>
+          </label>
+          <label>
+            Judge Model
+            <input
+              value={judgeModel}
+              disabled={!evaluationEnabled}
+              onChange={(event) => setJudgeModel(event.target.value)}
+              placeholder="gemini-2.5-flash"
+            />
+          </label>
+          <label className="inline-toggle">
+            <input
+              type="checkbox"
               checked={scheduleEnabled}
               onChange={(event) => setScheduleEnabled(event.target.checked)}
             />
@@ -1068,9 +1466,78 @@ export default function App() {
         </div>
         {scheduleEnabled && (
           <p className="muted">
-            Trials are spread across a fixed 15-minute window so you can observe latency behavior at the
-            selected time.
+            Warmups and measured trials are spread across one global 15-minute window for this run.
           </p>
+        )}
+        <p className="muted">
+          Planned run shape: {plannedScenarioCount} scenario(s) x {trials + warmupTrials} iterations ={" "}
+          {plannedExecutionCount} total calls (includes warmups).
+        </p>
+        {evaluationEnabled && (
+          <p className="muted">
+            Evaluation active: tier={acceptanceTier}, judge={judgeStack}:{judgeModel}.
+          </p>
+        )}
+        {evaluationEnabled && (
+          <div className="grid">
+            <label>
+              Critical Min Accuracy
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={criticalAccuracyThreshold}
+                onChange={(event) => setCriticalAccuracyThreshold(Math.max(0, Math.min(1, Number(event.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              Critical Max TTFT P50 (optional)
+              <input
+                value={criticalMaxTtft}
+                onChange={(event) => setCriticalMaxTtft(event.target.value)}
+                placeholder="e.g. 1.2"
+              />
+            </label>
+            <label>
+              Standard Min Accuracy
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={standardAccuracyThreshold}
+                onChange={(event) => setStandardAccuracyThreshold(Math.max(0, Math.min(1, Number(event.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              Standard Max TTFT P50 (optional)
+              <input
+                value={standardMaxTtft}
+                onChange={(event) => setStandardMaxTtft(event.target.value)}
+                placeholder="e.g. 1.8"
+              />
+            </label>
+            <label>
+              Exploratory Min Accuracy
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={exploratoryAccuracyThreshold}
+                onChange={(event) => setExploratoryAccuracyThreshold(Math.max(0, Math.min(1, Number(event.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              Exploratory Max TTFT P50 (optional)
+              <input
+                value={exploratoryMaxTtft}
+                onChange={(event) => setExploratoryMaxTtft(event.target.value)}
+                placeholder="e.g. 2.5"
+              />
+            </label>
+          </div>
         )}
         {stack === "vertex_api" && (
           <div className="grid">
@@ -1133,6 +1600,37 @@ export default function App() {
             Thinking
           </label>
           <label>
+            Thinking Mode
+            <select
+              value={thinkingMode}
+              disabled={!modeSelection.thinking}
+              onChange={(event) => setThinkingMode(event.target.value as ThinkingMode)}
+            >
+              <option value="auto">auto</option>
+              <option value="budget" disabled={!thinkingCaps.supportsBudget}>
+                budget
+              </option>
+              <option value="level" disabled={!thinkingCaps.supportsLevel}>
+                level
+              </option>
+            </select>
+          </label>
+          {effectiveThinkingMode === "level" ? (
+            <label>
+              Thinking Level
+              <select
+                value={thinkingLevel}
+                disabled={!modeSelection.thinking}
+                onChange={(event) => setThinkingLevel(event.target.value as ThinkingLevel)}
+              >
+                <option value="minimal">minimal</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+          ) : (
+          <label>
             Thinking Token Budget
             <input
               type="number"
@@ -1143,6 +1641,7 @@ export default function App() {
               onChange={(event) => setThinkingTokenBudget(Math.max(0, Number(event.target.value) || 0))}
             />
           </label>
+          )}
           <label>
             Cache Intent
             <select
@@ -1159,7 +1658,14 @@ export default function App() {
         </div>
         <p className="muted">
           Current mode: {modeSelection.streaming ? "streaming" : "non_streaming"} | thinking=
-          {String(modeSelection.thinking)} | thinking_budget={thinkingTokenBudget} | cache={cacheIntent}
+          {String(modeSelection.thinking)} | thinking_mode={effectiveThinkingMode}
+          {effectiveThinkingMode === "level"
+            ? ` | thinking_level=${thinkingLevel}`
+            : ` | thinking_budget=${thinkingTokenBudget}`}{" "}
+          | cache={cacheIntent}
+        </p>
+        <p className="muted">
+          Cache intent runs only the selected strategy (no hidden baseline scenario is added automatically).
         </p>
       </section>
 
@@ -1179,6 +1685,22 @@ export default function App() {
           </label>
           <button type="button" onClick={applySampleUseCase} disabled={!selectedUseCaseId}>
             Apply Example
+          </button>
+          <label>
+            Generated Prompt ({promptPresetFamilyLabel})
+            <select
+              value={selectedPromptPresetId}
+              onChange={(event) => setSelectedPromptPresetId(event.target.value)}
+            >
+              {currentPromptPresets.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={applyPromptPreset}>
+            Apply Prompt
           </button>
         </div>
         <label>
@@ -1465,6 +1987,14 @@ export default function App() {
           <p>
             <strong>Run ID:</strong> {result.run_id}
           </p>
+          <p>
+            <strong>Status:</strong> {result.status}
+          </p>
+          {result.status === "failed" && (
+            <p className="error">
+              Benchmark workflow failed{result.error_message ? `: ${result.error_message}` : "."}
+            </p>
+          )}
           {result.artifacts.schedule_window_start && result.artifacts.schedule_window_end && (
             <p>
               <strong>Scheduled Window:</strong> {result.artifacts.schedule_window_start} to{" "}
@@ -1480,8 +2010,19 @@ export default function App() {
             {result.recommendation.reliability_score.toFixed(3)}
           </p>
           <p>
+            <strong>Acceptance:</strong> {result.recommendation.overall_acceptance_status} |{" "}
+            <strong>Gate Pass:</strong> {result.recommendation.gate_pass_count} | <strong>Gate Fail:</strong>{" "}
+            {result.recommendation.gate_fail_count}
+          </p>
+          <p>
             <strong>Recommendation:</strong> {result.recommendation.rationale}
           </p>
+          {hasMixedTtftDefinitions && (
+            <p className="warn">
+              TTFT definitions in this run are mixed ({ttftDefinitionsInRun.join(", ")}). Compare scenarios with
+              the same TTFT definition for fair ranking.
+            </p>
+          )}
           <div className="actions">
             <button type="button" onClick={applyRecommendedSettings}>
               Apply Recommended Settings
@@ -1536,6 +2077,7 @@ export default function App() {
                       <th>TTFT P50</th>
                       <th>TTFT P95</th>
                       <th>E2E P50</th>
+                      <th>Accuracy</th>
                       <th>Success Rate</th>
                       <th>Error Rate</th>
                     </tr>
@@ -1548,6 +2090,7 @@ export default function App() {
                         <td>{row.ttft_p50_s?.toFixed(3) ?? "n/a"}</td>
                         <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
                         <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
+                        <td>{row.accuracy_score?.toFixed(3) ?? "n/a"}</td>
                         <td>{(row.success_rate * 100).toFixed(1)}%</td>
                         <td>{(row.error_rate * 100).toFixed(1)}%</td>
                       </tr>
@@ -1589,6 +2132,8 @@ export default function App() {
                   <th>Model</th>
                   <th>Mode</th>
                   <th>Thinking</th>
+                  <th>Thinking Mode</th>
+                  <th>Thinking Level</th>
                   <th>Thinking Budget</th>
                   <th>Cache</th>
                   <th>Prompt Type</th>
@@ -1600,6 +2145,11 @@ export default function App() {
                   <th>TTFT P95</th>
                   <th>E2E P50</th>
                   <th>TPS Avg</th>
+                  <th>Acc Mean</th>
+                  <th>Acc P50</th>
+                  <th>Acc P95</th>
+                  <th>Tier</th>
+                  <th>Acceptance</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -1621,6 +2171,8 @@ export default function App() {
                     <td>{row.model}</td>
                     <td>{row.mode}</td>
                     <td>{String(row.thinking)}</td>
+                    <td>{row.thinking_mode}</td>
+                    <td>{row.thinking_level ?? "n/a"}</td>
                     <td>{row.thinking_token_budget}</td>
                     <td>{row.cache_strategy}</td>
                     <td>{row.prompt_type}</td>
@@ -1632,12 +2184,64 @@ export default function App() {
                     <td>{row.ttft_p95_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.e2e_p50_s?.toFixed(3) ?? "n/a"}</td>
                     <td>{row.tokens_per_s_avg?.toFixed(2) ?? "n/a"}</td>
-                    <td>{row.note ?? row.ttft_definition ?? "ok"}</td>
+                    <td>{row.accuracy_score?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.accuracy_p50?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.accuracy_p95?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.acceptance_tier}</td>
+                    <td>{row.acceptance_passed === null ? "n/a" : row.acceptance_passed ? "pass" : "fail"}</td>
+                    <td>{row.acceptance_reason ?? row.note ?? row.ttft_definition ?? "ok"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <h3>Acceptance Report</h3>
+          {hasAcceptanceReportData ? (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Scenario</th>
+                    <th>Tier</th>
+                    <th>Pass</th>
+                    <th>Accuracy</th>
+                    <th>Min Accuracy</th>
+                    <th>Accuracy Delta</th>
+                    <th>TTFT P50</th>
+                    <th>Max TTFT</th>
+                    <th>TTFT Delta</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acceptanceReportRows.map((row) => (
+                    <tr key={`acceptance-${row.scenario_id}`}>
+                      <td>{row.scenario_id}</td>
+                      <td>{row.tier}</td>
+                      <td>{row.passed === null ? "n/a" : row.passed ? "pass" : "fail"}</td>
+                      <td>{row.accuracy?.toFixed(3) ?? "n/a"}</td>
+                      <td>{row.minAccuracy.toFixed(3)}</td>
+                      <td>
+                        {row.accuracyDelta === null
+                          ? "n/a"
+                          : `${row.accuracyDelta >= 0 ? "+" : ""}${row.accuracyDelta.toFixed(3)}`}
+                      </td>
+                      <td>{row.ttft?.toFixed(3) ?? "n/a"}</td>
+                      <td>{row.maxTtft === null ? "n/a" : row.maxTtft.toFixed(3)}</td>
+                      <td>
+                        {row.ttftDelta === null
+                          ? "n/a"
+                          : `${row.ttftDelta >= 0 ? "+" : ""}${row.ttftDelta.toFixed(3)}`}
+                      </td>
+                      <td>{row.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="muted">No acceptance evaluation data found for this run.</p>
+          )}
 
           {Object.keys(result.artifacts).length > 0 && (
             <div className="preview">

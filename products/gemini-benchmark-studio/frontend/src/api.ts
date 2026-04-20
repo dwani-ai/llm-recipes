@@ -12,6 +12,24 @@ import type {
   RunHistoryResponse,
 } from "./types";
 
+async function buildApiError(prefix: string, response: Response): Promise<Error> {
+  try {
+    const payload = await response.json();
+    const detail = payload?.detail;
+    if (typeof detail === "string") {
+      return new Error(`${prefix}: ${detail}`);
+    }
+    if (detail && typeof detail === "object") {
+      const message = detail.message ?? detail.error ?? JSON.stringify(detail);
+      return new Error(`${prefix}: ${message}`);
+    }
+    return new Error(`${prefix}: ${JSON.stringify(payload)}`);
+  } catch {
+    const text = await response.text();
+    return new Error(`${prefix}: ${text}`);
+  }
+}
+
 export async function fetchDefaultModes(): Promise<DefaultModesResponse> {
   const response = await fetch(`${API_BASE_URL}/api/benchmark/default-modes`);
   if (!response.ok) {
@@ -42,8 +60,7 @@ export async function runBenchmark(payload: BenchmarkRequest): Promise<Benchmark
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Benchmark run failed: ${text}`);
+    throw await buildApiError("Benchmark run failed", response);
   }
   return response.json();
 }
@@ -65,8 +82,7 @@ export async function uploadContextFile(file: File, variableKey = "data_context"
     }
   );
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`File upload failed: ${text}`);
+    throw await buildApiError("File upload failed", response);
   }
   return response.json();
 }
@@ -88,8 +104,7 @@ export async function optimizePrompt(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Prompt optimization failed: ${text}`);
+    throw await buildApiError("Prompt optimization failed", response);
   }
   return response.json();
 }
@@ -103,8 +118,7 @@ export async function optimizeAndBenchmark(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Optimize + benchmark failed: ${text}`);
+    throw await buildApiError("Optimize + benchmark failed", response);
   }
   return response.json();
 }
@@ -118,8 +132,7 @@ export async function fetchExactTokenCount(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Exact token count failed: ${text}`);
+    throw await buildApiError("Exact token count failed", response);
   }
   return response.json();
 }

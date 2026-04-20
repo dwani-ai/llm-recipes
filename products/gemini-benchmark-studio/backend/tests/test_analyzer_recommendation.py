@@ -51,3 +51,27 @@ def test_analyzer_returns_low_confidence_when_no_eligible_rows() -> None:
     assert output.ranked_scenarios == []
     assert output.confidence == "low"
     assert output.disqualified_scenarios[0]["reason"] == "no_successful_trials"
+
+
+def test_analyzer_applies_accuracy_gate_for_acceptance_tier() -> None:
+    analyzer = AnalyzerAgent()
+    summaries = [
+        _summary("scenario_fast_low_acc", 0.20, 0.25, 1.0, ok=9, unsupported=0, error=0, samples=10),
+        _summary("scenario_slightly_slower_high_acc", 0.30, 0.35, 1.2, ok=9, unsupported=0, error=0, samples=10),
+    ]
+    summaries[0]["accuracy_score"] = 0.70
+    summaries[1]["accuracy_score"] = 0.90
+
+    output = analyzer.analyze(
+        summaries,
+        objective="lowest_latency",
+        acceptance_tier="critical",
+        tier_thresholds={"critical": {"min_accuracy_score": 0.85, "max_ttft_p50_s": None}},
+        evaluation_enabled=True,
+    )
+
+    assert output.best_scenario_id == "scenario_slightly_slower_high_acc"
+    disqualified = {item["scenario_id"]: item["reason"] for item in output.disqualified_scenarios}
+    assert disqualified["scenario_fast_low_acc"] == "failed_accuracy_gate"
+    assert output.gate_pass_count == 1
+    assert output.gate_fail_count == 1

@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.schemas import BenchmarkRequest
+from app.services.evaluator import RubricEvaluator
+from app.services.thinking_config import resolve_thinking_config
 
 
 def utc_now_iso() -> str:
@@ -46,6 +48,8 @@ class Scenario:
     model: str
     mode: str
     thinking: bool
+    thinking_mode: str
+    thinking_level: Optional[str]
     thinking_token_budget: int
     cache_strategy: str
     prompt_type: str
@@ -59,6 +63,7 @@ class Scenario:
     def scenario_id(self) -> str:
         return (
             f"{self.stack}|{self.model}|{self.mode}|thinking_{self.thinking}|"
+            f"thinking_mode_{self.thinking_mode}|thinking_level_{self.thinking_level}|"
             f"thinking_budget_{self.thinking_token_budget}|cache_{self.cache_strategy}|{self.prompt_type}"
         )
 
@@ -79,10 +84,15 @@ class GoogleGenAIAdapter:
             "max_output_tokens": scenario.max_output_tokens,
             "temperature": scenario.temperature,
         }
-        if scenario.thinking:
-            cfg["thinking_config"] = {"thinking_budget": scenario.thinking_token_budget}
-        else:
-            cfg["thinking_config"] = {"thinking_budget": 0}
+        thinking_config, _, _ = resolve_thinking_config(
+            model=scenario.model,
+            thinking_enabled=scenario.thinking,
+            thinking_mode=scenario.thinking_mode,
+            thinking_token_budget=scenario.thinking_token_budget,
+            thinking_level=scenario.thinking_level,
+        )
+        if thinking_config is not None:
+            cfg["thinking_config"] = thinking_config
         if explicit_cache_name:
             cfg["cached_content"] = explicit_cache_name
         return cfg
@@ -132,18 +142,35 @@ class GoogleGenAIAdapter:
         return getattr(chunk, "text", "") or ""
 
     def run_once(self, scenario: Scenario, prompt_cfg: Dict[str, str]) -> Dict[str, Any]:
+        _, thinking_error, effective_thinking_mode = resolve_thinking_config(
+            model=scenario.model,
+            thinking_enabled=scenario.thinking,
+            thinking_mode=scenario.thinking_mode,
+            thinking_token_budget=scenario.thinking_token_budget,
+            thinking_level=scenario.thinking_level,
+        )
+        if thinking_error is not None:
+            return {"status": "unsupported", "reason": thinking_error}
+
         explicit_cache_name = None
         if scenario.cache_strategy == "explicit_cache":
             explicit_cache_name, cache_error = self._ensure_explicit_cache(scenario, prompt_cfg)
             if cache_error:
                 return {"status": "unsupported", "reason": cache_error}
 
-        prompt = prompt_cfg["user"] if scenario.cache_strategy == "none" else f"{prompt_cfg['shared_prefix']}\n{prompt_cfg['user']}"
+        if scenario.cache_strategy == "implicit_reuse":
+            prompt = f"{prompt_cfg['shared_prefix']}\n{prompt_cfg['user']}"
+        else:
+            prompt = prompt_cfg["user"]
         contents = [{"role": "user", "parts": [{"text": prompt.strip()}]}]
         config = self._config(scenario, explicit_cache_name)
         if scenario.mode == "streaming":
-            return self._streaming(scenario, contents, config)
-        return self._non_streaming(scenario, contents, config)
+            output = self._streaming(scenario, contents, config)
+        else:
+            output = self._non_streaming(scenario, contents, config)
+        output["thinking_mode"] = effective_thinking_mode
+        output["thinking_level"] = scenario.thinking_level if effective_thinking_mode == "level" else None
+        return output
 
     def _streaming(self, scenario: Scenario, contents: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
         start = time.perf_counter()
@@ -177,6 +204,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "first_final_output_token",
         }
 
@@ -200,6 +228,7 @@ class GoogleGenAIAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "response_complete_non_streaming",
         }
 
@@ -256,6 +285,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "first_output_token",
         }
 
@@ -282,6 +312,7 @@ class OpenAICompatAdapter:
             "e2e_s": total,
             "output_tokens": tokens,
             "tokens_per_s": (tokens / total) if total > 0 else None,
+            "output_text": text,
             "ttft_definition": "response_complete_non_streaming",
         }
 
@@ -320,11 +351,13 @@ class BenchmarkRunner:
     def build_scenarios(self, request: BenchmarkRequest) -> List[Scenario]:
         modes = ["streaming"] if request.mode_selection.streaming else ["non_streaming"]
         thinking_values = [True] if request.mode_selection.thinking else [False]
-        cache_values = ["none"]
+        cache_values: List[str] = []
         if request.mode_selection.implicit_cache:
             cache_values.append("implicit_reuse")
         if request.mode_selection.explicit_cache:
             cache_values.append("explicit_cache")
+        if not cache_values:
+            cache_values.append("none")
         prompt_types = ["short_prompt", "long_context"] if request.include_long_context else ["short_prompt"]
         scenarios: List[Scenario] = []
         for stack, model, mode, thinking, cache, prompt_type in itertools.product(
@@ -341,6 +374,8 @@ class BenchmarkRunner:
                     model=model,
                     mode=mode,
                     thinking=thinking,
+                    thinking_mode=request.thinking_mode,
+                    thinking_level=request.thinking_level,
                     cache_strategy=cache,
                     prompt_type=prompt_type,
                     trials=request.trials,
@@ -397,6 +432,11 @@ class BenchmarkRunner:
                 for item in items
                 if item["status"] == "ok" and item["tokens_per_s"] is not None
             ]
+            accuracy_scores = [
+                item["accuracy_score"]
+                for item in items
+                if item["status"] == "ok" and item.get("accuracy_score") is not None
+            ]
             first = items[0]
             statuses = [item["status"] for item in items]
             unsupported = [item.get("reason") for item in items if item["status"] == "unsupported"]
@@ -408,6 +448,8 @@ class BenchmarkRunner:
                     "model": first["model"],
                     "mode": first["mode"],
                     "thinking": first["thinking"],
+                    "thinking_mode": first.get("thinking_mode", "off"),
+                    "thinking_level": first.get("thinking_level"),
                     "thinking_token_budget": first["thinking_token_budget"],
                     "cache_strategy": first["cache_strategy"],
                     "prompt_type": first["prompt_type"],
@@ -419,6 +461,13 @@ class BenchmarkRunner:
                     "ttft_p95_s": percentile(ttfts, 95),
                     "e2e_p50_s": percentile(e2es, 50),
                     "tokens_per_s_avg": statistics.fmean(tps) if tps else None,
+                    "accuracy_score": statistics.fmean(accuracy_scores) if accuracy_scores else None,
+                    "accuracy_p50": percentile(accuracy_scores, 50),
+                    "accuracy_p95": percentile(accuracy_scores, 95),
+                    "evaluation_samples": len(accuracy_scores),
+                    "acceptance_tier": first.get("acceptance_tier", "standard"),
+                    "acceptance_passed": None,
+                    "acceptance_reason": None,
                     "ttft_definition": first.get("ttft_definition", "first_output_token"),
                     "note": unsupported[0] if unsupported else (errors[0] if errors else None),
                 }
@@ -471,6 +520,7 @@ class BenchmarkRunner:
         prompts = self._prompt_configs(rendered_prompt, request.prompt_variables)
 
         adapters: Dict[str, Any] = {}
+        evaluator = RubricEvaluator(request) if request.evaluation_enabled else None
         if "google_genai" in request.stacks:
             try:
                 adapters["google_genai"] = GoogleGenAIAdapter(request.api_key or "")
@@ -495,9 +545,33 @@ class BenchmarkRunner:
                 except Exception as exc:
                     adapters["vertex_api"] = {"init_error": f"{type(exc).__name__}: {exc}"}
 
-        raw_rows: List[Dict[str, Any]] = []
+        execution_plan: List[Tuple[Scenario, int, bool, Dict[str, str], Any]] = []
         for scenario in scenarios:
-            if scenario.stack not in adapters:
+            adapter = adapters.get(scenario.stack)
+            prompt_cfg = prompts[scenario.prompt_type]
+            total_iterations = scenario.warmup_trials + scenario.trials
+            for iteration in range(total_iterations):
+                execution_plan.append(
+                    (
+                        scenario,
+                        iteration,
+                        iteration < scenario.warmup_trials,
+                        prompt_cfg,
+                        adapter,
+                    )
+                )
+
+        scheduled_slots = self._scheduled_slots(request, len(execution_plan))
+        raw_rows: List[Dict[str, Any]] = []
+        for index, (scenario, iteration, is_warmup, prompt_cfg, adapter) in enumerate(execution_plan):
+            scheduled_for = scheduled_slots[index] if scheduled_slots else None
+            if scheduled_for is not None:
+                now_dt = datetime.now(tz=timezone.utc)
+                wait_s = (scheduled_for - now_dt).total_seconds()
+                if wait_s > 0:
+                    time.sleep(wait_s)
+
+            if adapter is None:
                 raw_rows.append(
                     {
                         "started_at": utc_now_iso(),
@@ -506,24 +580,32 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_mode": scenario.thinking_mode,
+                        "thinking_level": scenario.thinking_level,
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
-                        "iteration": 0,
-                        "is_warmup": False,
+                        "iteration": iteration,
+                        "is_warmup": is_warmup,
                         "status": "unsupported",
                         "ttft_s": None,
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
                         "ttft_definition": "first_output_token",
-                        "scheduled_for": None,
+                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": f"unsupported_stack:{scenario.stack}",
                         "error": None,
+                        "accuracy_score": None,
+                        "evaluation_status": "not_evaluated",
+                        "evaluation_error": None,
+                        "evaluation_rationale": None,
+                        "evaluation_criteria": {},
+                        "acceptance_tier": request.acceptance_tier,
                     }
                 )
                 continue
-            adapter = adapters[scenario.stack]
+
             if isinstance(adapter, dict) and adapter.get("init_error"):
                 raw_rows.append(
                     {
@@ -533,60 +615,83 @@ class BenchmarkRunner:
                         "model": scenario.model,
                         "mode": scenario.mode,
                         "thinking": scenario.thinking,
+                        "thinking_mode": scenario.thinking_mode,
+                        "thinking_level": scenario.thinking_level,
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
-                        "iteration": 0,
-                        "is_warmup": False,
+                        "iteration": iteration,
+                        "is_warmup": is_warmup,
                         "status": "error",
                         "ttft_s": None,
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
                         "ttft_definition": "first_output_token",
-                        "scheduled_for": None,
+                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": None,
                         "error": adapter["init_error"],
+                        "accuracy_score": None,
+                        "evaluation_status": "not_evaluated",
+                        "evaluation_error": None,
+                        "evaluation_rationale": None,
+                        "evaluation_criteria": {},
+                        "acceptance_tier": request.acceptance_tier,
                     }
                 )
                 continue
-            prompt_cfg = prompts[scenario.prompt_type]
-            total_iterations = scenario.warmup_trials + scenario.trials
-            scheduled_slots = self._scheduled_slots(request, total_iterations)
-            for iteration in range(total_iterations):
-                is_warmup = iteration < scenario.warmup_trials
-                scheduled_for = scheduled_slots[iteration] if scheduled_slots else None
-                if scheduled_for is not None:
-                    now_dt = datetime.now(tz=timezone.utc)
-                    wait_s = (scheduled_for - now_dt).total_seconds()
-                    if wait_s > 0:
-                        time.sleep(wait_s)
-                started_at = utc_now_iso()
-                payload = adapter.run_once(scenario, prompt_cfg)
-                raw_rows.append(
-                    {
-                        "started_at": started_at,
-                        "scenario_id": scenario.scenario_id,
-                        "stack": scenario.stack,
-                        "model": scenario.model,
-                        "mode": scenario.mode,
-                        "thinking": scenario.thinking,
-                        "thinking_token_budget": scenario.thinking_token_budget,
-                        "cache_strategy": scenario.cache_strategy,
-                        "prompt_type": scenario.prompt_type,
-                        "iteration": iteration,
-                        "is_warmup": is_warmup,
-                        "status": payload.get("status", "error"),
-                        "ttft_s": payload.get("ttft_s"),
-                        "e2e_s": payload.get("e2e_s"),
-                        "output_tokens": payload.get("output_tokens"),
-                        "tokens_per_s": payload.get("tokens_per_s"),
-                        "ttft_definition": payload.get("ttft_definition", "first_output_token"),
-                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
-                        "reason": payload.get("reason"),
-                        "error": payload.get("error"),
-                    }
+
+            started_at = utc_now_iso()
+            payload = adapter.run_once(scenario, prompt_cfg)
+            evaluation_status = "not_evaluated"
+            evaluation_error = None
+            evaluation_rationale = None
+            evaluation_criteria: Dict[str, float] = {}
+            accuracy_score = None
+            if evaluator is not None and (not is_warmup) and payload.get("status") == "ok":
+                evaluation = evaluator.evaluate(
+                    rendered_prompt=rendered_prompt,
+                    data_context=prompt_cfg.get("shared_prefix", ""),
+                    model_output=payload.get("output_text", "") or "",
+                    acceptance_tier=request.acceptance_tier,
                 )
+                evaluation_status = evaluation.status
+                evaluation_error = evaluation.error
+                evaluation_rationale = evaluation.rationale
+                evaluation_criteria = evaluation.criteria_scores
+                accuracy_score = evaluation.accuracy_score
+            raw_rows.append(
+                {
+                    "started_at": started_at,
+                    "scenario_id": scenario.scenario_id,
+                    "stack": scenario.stack,
+                    "model": scenario.model,
+                    "mode": scenario.mode,
+                    "thinking": scenario.thinking,
+                    "thinking_mode": payload.get("thinking_mode", scenario.thinking_mode),
+                    "thinking_level": payload.get("thinking_level", scenario.thinking_level),
+                    "thinking_token_budget": scenario.thinking_token_budget,
+                    "cache_strategy": scenario.cache_strategy,
+                    "prompt_type": scenario.prompt_type,
+                    "iteration": iteration,
+                    "is_warmup": is_warmup,
+                    "status": payload.get("status", "error"),
+                    "ttft_s": payload.get("ttft_s"),
+                    "e2e_s": payload.get("e2e_s"),
+                    "output_tokens": payload.get("output_tokens"),
+                    "tokens_per_s": payload.get("tokens_per_s"),
+                    "ttft_definition": payload.get("ttft_definition", "first_output_token"),
+                    "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
+                    "reason": payload.get("reason"),
+                    "error": payload.get("error"),
+                    "accuracy_score": accuracy_score,
+                    "evaluation_status": evaluation_status,
+                    "evaluation_error": evaluation_error,
+                    "evaluation_rationale": evaluation_rationale,
+                    "evaluation_criteria": evaluation_criteria,
+                    "acceptance_tier": request.acceptance_tier,
+                }
+            )
 
         raw_path = run_dir / "raw_results.jsonl"
         self._write_jsonl(raw_path, raw_rows)
@@ -594,6 +699,22 @@ class BenchmarkRunner:
         summaries = self._aggregate(raw_rows)
         summary_json = run_dir / "summary.json"
         summary_json.write_text(json.dumps(summaries, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+
+        evaluation_summary_rows = [
+            {
+                "scenario_id": row["scenario_id"],
+                "accuracy_score": row.get("accuracy_score"),
+                "accuracy_p50": row.get("accuracy_p50"),
+                "accuracy_p95": row.get("accuracy_p95"),
+                "evaluation_samples": row.get("evaluation_samples", 0),
+            }
+            for row in summaries
+        ]
+        evaluation_summary = run_dir / "evaluation_summary.json"
+        evaluation_summary.write_text(
+            json.dumps(evaluation_summary_rows, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
 
         summary_csv = run_dir / "summary.csv"
         self._write_csv(summary_csv, summaries)
@@ -607,6 +728,7 @@ class BenchmarkRunner:
             "summary_json": str(summary_json),
             "summary_csv": str(summary_csv),
             "report_md": str(report_md),
+            "evaluation_summary_json": str(evaluation_summary),
         }
         if request.schedule_enabled:
             start_at = request.schedule_start_at or datetime.now(tz=timezone.utc)

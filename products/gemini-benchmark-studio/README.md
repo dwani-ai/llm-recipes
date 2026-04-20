@@ -15,19 +15,25 @@ Standalone product for benchmarking Gemini response modes with:
 - API key input from UI for each run (not persisted)
 - Checkbox mode selection
 - Thinking token budget control (`thinking_token_budget`)
+- Model-aware thinking controls (`thinking_mode`, `thinking_level`, `thinking_token_budget`)
 - Stack selection: `google_genai`, `openai_compat`, `vertex_api`
 - Best known mode defaults preselected:
   - stack: `google_genai`
   - model: `gemini-2.5-flash`
-  - mode: `streaming`
-  - thinking: `off`
-  - cache: `implicit_reuse`
+  - mode: `non_streaming`
+  - thinking: `on`
+  - thinking token budget: `256`
+  - cache: `explicit_cache`
 - Prompt template + variable editor and preview
+- Generated prompt presets for `non_streaming + thinking + explicit_cache` in UX
 - Agent-assisted prompt optimization (objective-based variants + winner selection)
 - One-click optimize + benchmark flow (kept separate from standalone optimize and benchmark actions)
 - Data file upload into `data_context` prompt variable
 - Vertex API credentials form (project, location, endpoint, optional access token)
 - Scheduled run window (fixed 15 minutes) to measure latency behavior at selected time
+- Global scheduling semantics: all warmups + measured trials are distributed inside the selected 15-minute window
+- Rubric-based accuracy evaluation (optional) for model acceptance testing
+- Tiered acceptance gates (`critical`, `standard`, `exploratory`) with accuracy and optional latency ceilings
 - Benchmark run artifacts and recommendation report
 - Run history endpoint and UI table for recent runs
 
@@ -306,14 +312,53 @@ TTFT measurement detail:
 - For streaming + thinking on `google_genai`, TTFT is measured at the first **final output token** after internal thinking, not at the first internal reasoning chunk.
 - For non-streaming calls, TTFT equals response completion time.
 
+Thinking mode compatibility:
+
+- Gemini 2.5 family: budget-style thinking control (`thinking_mode=budget` + `thinking_token_budget`).
+- Gemini 3.x family: level-style thinking control (`thinking_mode=level` + `thinking_level`).
+- `thinking_mode=auto` selects the compatible control based on model family.
+
 Interpretation guide:
 
 - Prefer rows labeled `eligible`.
 - Treat `unstable`/`disqualified` rows as non-default candidates until failure causes are fixed.
 - Compare winner vs runner-up before rollout to avoid overfitting to one run.
+- If a run mixes multiple `ttft_definition` values, compare scenarios only within the same definition.
+
+## Accuracy Evaluation and Acceptance Gates
+
+When enabled, every measured (non-warmup) trial is evaluated by a rubric judge model.
+
+- Evaluation fields:
+  - `evaluation_enabled`
+  - `evaluation.judge_stack`, `evaluation.judge_model`
+  - `evaluation.rubric_criteria`
+  - `evaluation.tier_thresholds`
+- Acceptance tier:
+  - `acceptance_tier` chooses gate profile for the run.
+  - Tier defaults:
+    - `critical`: `min_accuracy_score >= 0.85`
+    - `standard`: `min_accuracy_score >= 0.75`
+    - `exploratory`: `min_accuracy_score >= 0.65`
+- Optional latency gate:
+  - set `max_ttft_p50_s` per tier.
+
+Scenario-level outputs now include:
+
+- `accuracy_score`, `accuracy_p50`, `accuracy_p95`
+- `evaluation_samples`
+- `acceptance_passed`, `acceptance_reason`, `acceptance_tier`
+
+Recommendation-level outputs now include:
+
+- `gate_pass_count`, `gate_fail_count`
+- `overall_acceptance_status`
+
+The generated Studio report markdown (see `report_md` / `acceptance_report_md` in artifacts) ends with a **Report completeness (self-check)** section: a table that verifies artifact files on disk, schedule/evaluation metadata, prompt/template warnings, and whether latency and accuracy aggregates look consistent.
 
 ## Project Layout
 
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — full system architecture (components, data flow, agents, evaluation)
 - `frontend/` - React + Vite app
 - `backend/` - FastAPI API + benchmark engine + multi-agent layer
 
@@ -346,8 +391,76 @@ The frontend expects backend at `http://localhost:8000`.
 - `POST /api/prompt/optimize`
 - `POST /api/prompt/optimize-and-benchmark`
 - `POST /api/prompt/upload-context`
-- `POST /api/benchmark/run`
+- `POST /api/benchmark/run` (returns HTTP 500 on workflow failure with structured fallback payload in `detail.fallback`)
 - `GET /api/benchmark/history`
+
+`POST /api/prompt/optimize-and-benchmark` keeps HTTP 200 when optimization succeeds but benchmark execution fails, and surfaces benchmark failure state via:
+
+- `benchmark_failed`
+- `benchmark_error`
+- `benchmark.status = "failed"`
+
+## Run Benchmark from CLI
+
+You can run benchmarks directly from terminal without starting the UI.
+
+Defaults are:
+
+- stack: `google_genai` (GenAI SDK path)
+- mode: non-streaming
+- thinking: enabled
+- thinking token budget: `1024`
+
+Run with variables from terminal:
+
+```bash
+cd backend
+source venv/bin/activate
+python -m app.cli \
+  --api-key "$GEMINI_API_KEY" \
+  --model gemini-2.5-flash \
+  --var dataset_name=customer_support_logs \
+  --var goal="reduce latency variance" \
+  --var data_context="Support conversations from last 30 days."
+```
+
+Run from project root via shell wrapper:
+
+```bash
+cd products/gemini-benchmark-studio
+bash ./run_benchmark_cli.sh \
+  --api-key "$GEMINI_API_KEY" \
+  --var dataset_name=customer_support_logs \
+  --var goal="reduce latency variance"
+```
+
+Run with variables from a JSON file:
+
+```bash
+cd backend
+source venv/bin/activate
+python -m app.cli \
+  --api-key "$GEMINI_API_KEY" \
+  --vars-json ./vars.json
+```
+
+Example `vars.json`:
+
+```json
+{
+  "dataset_name": "customer_support_logs",
+  "goal": "reduce latency variance",
+  "data_context": "Support conversations from last 30 days."
+}
+```
+
+Notes:
+
+- `--var key=value` can be repeated and overrides matching keys from `--vars-json`.
+- Add `--streaming` to switch to streaming mode.
+- Add `--no-thinking` to disable thinking.
+- Use `--thinking-token-budget` to control thinking budget.
+- Use `--json` to print full run payload (artifacts + summaries) as JSON.
 
 For `vertex_api`, send `vertex_config` with:
 
@@ -388,6 +501,7 @@ Run this sequence after setup:
    - disqualified reasons are understandable
    - best scenario can be applied to form controls.
    - if schedule is enabled, artifacts include `schedule_window_start` and `schedule_window_end`.
+   - if evaluation is enabled, rows show accuracy metrics and acceptance pass/fail reasons.
 
 ## Run Tests
 
