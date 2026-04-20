@@ -60,6 +60,8 @@ export type ScenarioSummary = {
 
 export type BenchmarkResponse = {
   run_id: string;
+  status: "ok" | "failed";
+  error_message?: string | null;
   rendered_prompt: string;
   summaries: ScenarioSummary[];
   recommendation: {
@@ -150,6 +152,8 @@ export type PromptOptimizeBenchmarkRequest = {
 export type PromptOptimizeBenchmarkResponse = {
   optimization: PromptOptimizationResponse;
   benchmark: BenchmarkResponse;
+  benchmark_failed: boolean;
+  benchmark_error?: string | null;
 };
 
 export type PromptTokenCountRequest = {

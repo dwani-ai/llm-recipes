@@ -125,6 +125,8 @@ class SupervisorAgent:
     def fallback_response(self, error_message: str) -> BenchmarkResponse:
         return BenchmarkResponse(
             run_id="failed",
+            status="failed",
+            error_message=error_message,
             rendered_prompt="",
             summaries=[],
             recommendation=BenchmarkRecommendation(

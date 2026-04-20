@@ -157,7 +157,10 @@ class GoogleGenAIAdapter:
             if cache_error:
                 return {"status": "unsupported", "reason": cache_error}
 
-        prompt = prompt_cfg["user"] if scenario.cache_strategy == "none" else f"{prompt_cfg['shared_prefix']}\n{prompt_cfg['user']}"
+        if scenario.cache_strategy == "implicit_reuse":
+            prompt = f"{prompt_cfg['shared_prefix']}\n{prompt_cfg['user']}"
+        else:
+            prompt = prompt_cfg["user"]
         contents = [{"role": "user", "parts": [{"text": prompt.strip()}]}]
         config = self._config(scenario, explicit_cache_name)
         if scenario.mode == "streaming":
@@ -343,11 +346,13 @@ class BenchmarkRunner:
     def build_scenarios(self, request: BenchmarkRequest) -> List[Scenario]:
         modes = ["streaming"] if request.mode_selection.streaming else ["non_streaming"]
         thinking_values = [True] if request.mode_selection.thinking else [False]
-        cache_values = ["none"]
+        cache_values: List[str] = []
         if request.mode_selection.implicit_cache:
             cache_values.append("implicit_reuse")
         if request.mode_selection.explicit_cache:
             cache_values.append("explicit_cache")
+        if not cache_values:
+            cache_values.append("none")
         prompt_types = ["short_prompt", "long_context"] if request.include_long_context else ["short_prompt"]
         scenarios: List[Scenario] = []
         for stack, model, mode, thinking, cache, prompt_type in itertools.product(
@@ -522,9 +527,33 @@ class BenchmarkRunner:
                 except Exception as exc:
                     adapters["vertex_api"] = {"init_error": f"{type(exc).__name__}: {exc}"}
 
-        raw_rows: List[Dict[str, Any]] = []
+        execution_plan: List[Tuple[Scenario, int, bool, Dict[str, str], Any]] = []
         for scenario in scenarios:
-            if scenario.stack not in adapters:
+            adapter = adapters.get(scenario.stack)
+            prompt_cfg = prompts[scenario.prompt_type]
+            total_iterations = scenario.warmup_trials + scenario.trials
+            for iteration in range(total_iterations):
+                execution_plan.append(
+                    (
+                        scenario,
+                        iteration,
+                        iteration < scenario.warmup_trials,
+                        prompt_cfg,
+                        adapter,
+                    )
+                )
+
+        scheduled_slots = self._scheduled_slots(request, len(execution_plan))
+        raw_rows: List[Dict[str, Any]] = []
+        for index, (scenario, iteration, is_warmup, prompt_cfg, adapter) in enumerate(execution_plan):
+            scheduled_for = scheduled_slots[index] if scheduled_slots else None
+            if scheduled_for is not None:
+                now_dt = datetime.now(tz=timezone.utc)
+                wait_s = (scheduled_for - now_dt).total_seconds()
+                if wait_s > 0:
+                    time.sleep(wait_s)
+
+            if adapter is None:
                 raw_rows.append(
                     {
                         "started_at": utc_now_iso(),
@@ -538,21 +567,21 @@ class BenchmarkRunner:
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
-                        "iteration": 0,
-                        "is_warmup": False,
+                        "iteration": iteration,
+                        "is_warmup": is_warmup,
                         "status": "unsupported",
                         "ttft_s": None,
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
                         "ttft_definition": "first_output_token",
-                        "scheduled_for": None,
+                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": f"unsupported_stack:{scenario.stack}",
                         "error": None,
                     }
                 )
                 continue
-            adapter = adapters[scenario.stack]
+
             if isinstance(adapter, dict) and adapter.get("init_error"):
                 raw_rows.append(
                     {
@@ -567,59 +596,49 @@ class BenchmarkRunner:
                         "thinking_token_budget": scenario.thinking_token_budget,
                         "cache_strategy": scenario.cache_strategy,
                         "prompt_type": scenario.prompt_type,
-                        "iteration": 0,
-                        "is_warmup": False,
+                        "iteration": iteration,
+                        "is_warmup": is_warmup,
                         "status": "error",
                         "ttft_s": None,
                         "e2e_s": None,
                         "output_tokens": None,
                         "tokens_per_s": None,
                         "ttft_definition": "first_output_token",
-                        "scheduled_for": None,
+                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
                         "reason": None,
                         "error": adapter["init_error"],
                     }
                 )
                 continue
-            prompt_cfg = prompts[scenario.prompt_type]
-            total_iterations = scenario.warmup_trials + scenario.trials
-            scheduled_slots = self._scheduled_slots(request, total_iterations)
-            for iteration in range(total_iterations):
-                is_warmup = iteration < scenario.warmup_trials
-                scheduled_for = scheduled_slots[iteration] if scheduled_slots else None
-                if scheduled_for is not None:
-                    now_dt = datetime.now(tz=timezone.utc)
-                    wait_s = (scheduled_for - now_dt).total_seconds()
-                    if wait_s > 0:
-                        time.sleep(wait_s)
-                started_at = utc_now_iso()
-                payload = adapter.run_once(scenario, prompt_cfg)
-                raw_rows.append(
-                    {
-                        "started_at": started_at,
-                        "scenario_id": scenario.scenario_id,
-                        "stack": scenario.stack,
-                        "model": scenario.model,
-                        "mode": scenario.mode,
-                        "thinking": scenario.thinking,
-                        "thinking_mode": payload.get("thinking_mode", scenario.thinking_mode),
-                        "thinking_level": payload.get("thinking_level", scenario.thinking_level),
-                        "thinking_token_budget": scenario.thinking_token_budget,
-                        "cache_strategy": scenario.cache_strategy,
-                        "prompt_type": scenario.prompt_type,
-                        "iteration": iteration,
-                        "is_warmup": is_warmup,
-                        "status": payload.get("status", "error"),
-                        "ttft_s": payload.get("ttft_s"),
-                        "e2e_s": payload.get("e2e_s"),
-                        "output_tokens": payload.get("output_tokens"),
-                        "tokens_per_s": payload.get("tokens_per_s"),
-                        "ttft_definition": payload.get("ttft_definition", "first_output_token"),
-                        "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
-                        "reason": payload.get("reason"),
-                        "error": payload.get("error"),
-                    }
-                )
+
+            started_at = utc_now_iso()
+            payload = adapter.run_once(scenario, prompt_cfg)
+            raw_rows.append(
+                {
+                    "started_at": started_at,
+                    "scenario_id": scenario.scenario_id,
+                    "stack": scenario.stack,
+                    "model": scenario.model,
+                    "mode": scenario.mode,
+                    "thinking": scenario.thinking,
+                    "thinking_mode": payload.get("thinking_mode", scenario.thinking_mode),
+                    "thinking_level": payload.get("thinking_level", scenario.thinking_level),
+                    "thinking_token_budget": scenario.thinking_token_budget,
+                    "cache_strategy": scenario.cache_strategy,
+                    "prompt_type": scenario.prompt_type,
+                    "iteration": iteration,
+                    "is_warmup": is_warmup,
+                    "status": payload.get("status", "error"),
+                    "ttft_s": payload.get("ttft_s"),
+                    "e2e_s": payload.get("e2e_s"),
+                    "output_tokens": payload.get("output_tokens"),
+                    "tokens_per_s": payload.get("tokens_per_s"),
+                    "ttft_definition": payload.get("ttft_definition", "first_output_token"),
+                    "scheduled_for": scheduled_for.isoformat() if scheduled_for is not None else None,
+                    "reason": payload.get("reason"),
+                    "error": payload.get("error"),
+                }
+            )
 
         raw_path = run_dir / "raw_results.jsonl"
         self._write_jsonl(raw_path, raw_rows)

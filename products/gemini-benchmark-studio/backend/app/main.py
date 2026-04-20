@@ -158,7 +158,15 @@ def run_benchmark(request: BenchmarkRequest) -> BenchmarkResponse:
         _save_run_history(request, result.response)
         return result.response
     except Exception as exc:
-        return supervisor.fallback_response(str(exc))
+        fallback = supervisor.fallback_response(str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Benchmark workflow failed.",
+                "error": str(exc),
+                "fallback": fallback.model_dump(),
+            },
+        ) from exc
 
 
 @app.post("/api/prompt/optimize-and-benchmark", response_model=PromptOptimizeBenchmarkResponse)
@@ -168,12 +176,21 @@ def optimize_and_benchmark(request: PromptOptimizeBenchmarkRequest) -> PromptOpt
     benchmark_request = request.benchmark
     if request.use_winner_template:
         benchmark_request = request.benchmark.model_copy(update={"prompt_template": optimization.winner_template})
+    benchmark_error = None
+    benchmark_failed = False
     try:
         benchmark_result = supervisor.run(benchmark_request).response
         _save_run_history(benchmark_request, benchmark_result)
     except Exception as exc:
         benchmark_result = supervisor.fallback_response(str(exc))
-    return PromptOptimizeBenchmarkResponse(optimization=optimization, benchmark=benchmark_result)
+        benchmark_error = str(exc)
+        benchmark_failed = True
+    return PromptOptimizeBenchmarkResponse(
+        optimization=optimization,
+        benchmark=benchmark_result,
+        benchmark_failed=benchmark_failed,
+        benchmark_error=benchmark_error,
+    )
 
 
 @app.get("/api/benchmark/history", response_model=RunHistoryResponse)

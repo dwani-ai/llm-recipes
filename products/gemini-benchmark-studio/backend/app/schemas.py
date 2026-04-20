@@ -87,6 +87,8 @@ class PromptOptimizeBenchmarkRequest(BaseModel):
 class PromptOptimizeBenchmarkResponse(BaseModel):
     optimization: PromptOptimizationResponse
     benchmark: "BenchmarkResponse"
+    benchmark_failed: bool = False
+    benchmark_error: Optional[str] = None
 
 
 class UploadContextResponse(BaseModel):
@@ -165,6 +167,8 @@ class BenchmarkRecommendation(BaseModel):
 
 class BenchmarkResponse(BaseModel):
     run_id: str
+    status: Literal["ok", "failed"] = "ok"
+    error_message: Optional[str] = None
     rendered_prompt: str
     summaries: List[ScenarioSummary]
     recommendation: BenchmarkRecommendation

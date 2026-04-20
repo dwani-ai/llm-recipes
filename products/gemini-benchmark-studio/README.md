@@ -31,6 +31,7 @@ Standalone product for benchmarking Gemini response modes with:
 - Data file upload into `data_context` prompt variable
 - Vertex API credentials form (project, location, endpoint, optional access token)
 - Scheduled run window (fixed 15 minutes) to measure latency behavior at selected time
+- Global scheduling semantics: all warmups + measured trials are distributed inside the selected 15-minute window
 - Benchmark run artifacts and recommendation report
 - Run history endpoint and UI table for recent runs
 
@@ -320,6 +321,7 @@ Interpretation guide:
 - Prefer rows labeled `eligible`.
 - Treat `unstable`/`disqualified` rows as non-default candidates until failure causes are fixed.
 - Compare winner vs runner-up before rollout to avoid overfitting to one run.
+- If a run mixes multiple `ttft_definition` values, compare scenarios only within the same definition.
 
 ## Project Layout
 
@@ -355,8 +357,14 @@ The frontend expects backend at `http://localhost:8000`.
 - `POST /api/prompt/optimize`
 - `POST /api/prompt/optimize-and-benchmark`
 - `POST /api/prompt/upload-context`
-- `POST /api/benchmark/run`
+- `POST /api/benchmark/run` (returns HTTP 500 on workflow failure with structured fallback payload in `detail.fallback`)
 - `GET /api/benchmark/history`
+
+`POST /api/prompt/optimize-and-benchmark` keeps HTTP 200 when optimization succeeds but benchmark execution fails, and surfaces benchmark failure state via:
+
+- `benchmark_failed`
+- `benchmark_error`
+- `benchmark.status = "failed"`
 
 ## Run Benchmark from CLI
 

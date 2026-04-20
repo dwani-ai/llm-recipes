@@ -535,6 +535,14 @@ export default function App() {
       note: "vertex_api OpenAI endpoint path has limited thinking/explicit cache controls.",
     };
   }, [stack]);
+  const selectedCacheStrategies = useMemo<CacheStrategy[]>(() => {
+    if (cacheIntent === "none") {
+      return ["none"];
+    }
+    return [cacheIntent];
+  }, [cacheIntent]);
+  const plannedScenarioCount = selectedCacheStrategies.length * 2;
+  const plannedExecutionCount = plannedScenarioCount * (trials + warmupTrials);
 
   useEffect(() => {
     void fetchDefaultModes()
@@ -752,6 +760,15 @@ export default function App() {
 
   async function handleExactTokenCount() {
     setError(null);
+    if (stack === "vertex_api") {
+      if (!vertexProjectId.trim() || !vertexLocation.trim() || !vertexEndpointId.trim()) {
+        setError("Vertex Project ID, Location, and Endpoint ID are required for vertex_api.");
+        return;
+      }
+    } else if (!apiKey.trim()) {
+      setError("API key is required for token counting on this stack.");
+      return;
+    }
     setIsCountingTokens(true);
     try {
       const response = await fetchExactTokenCount({
@@ -788,9 +805,7 @@ export default function App() {
   }
 
   function buildCodeVariations(): CodeVariation[] {
-    const cacheStrategies: CacheStrategy[] =
-      cacheIntent === "none" ? ["none"] : [cacheIntent];
-    return cacheStrategies.map((cacheStrategy) => {
+    return selectedCacheStrategies.map((cacheStrategy) => {
       const modeLabel = modeSelection.streaming ? "streaming" : "non_streaming";
       const thinkingLabel = modeSelection.thinking ? "thinking_on" : "thinking_off";
       return {
@@ -1131,6 +1146,13 @@ export default function App() {
       setLastOptimizeBenchmarkTemplateAfter(combined.optimization.winner_template);
       setPromptTemplate(combined.optimization.winner_template);
       setResult(combined.benchmark);
+      if (combined.benchmark_failed) {
+        setError(
+          combined.benchmark_error
+            ? `Benchmark phase failed after optimization: ${combined.benchmark_error}`
+            : "Benchmark phase failed after optimization."
+        );
+      }
       await refreshHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Optimize + benchmark failed");
@@ -1162,6 +1184,13 @@ export default function App() {
 
   const bestRankedScenario = result?.recommendation.ranked_scenarios?.[0] ?? null;
   const runnerUpScenario = result?.recommendation.ranked_scenarios?.[1] ?? null;
+  const ttftDefinitionsInRun = useMemo(() => {
+    if (!result) {
+      return [];
+    }
+    return Array.from(new Set(result.summaries.map((row) => row.ttft_definition).filter(Boolean)));
+  }, [result]);
+  const hasMixedTtftDefinitions = ttftDefinitionsInRun.length > 1;
   const historyA = history.find((item) => item.run_id === historyCompareA);
   const historyB = history.find((item) => item.run_id === historyCompareB);
 
@@ -1176,12 +1205,16 @@ export default function App() {
         <h2>Run Settings</h2>
         <div className="grid">
           <label>
-            API Key
+            API Key {stack === "vertex_api" ? "(optional with ADC)" : ""}
             <input
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder="Enter Gemini API key"
+              placeholder={
+                stack === "vertex_api"
+                  ? "Optional: leave blank to use ADC or provide access token below"
+                  : "Enter Gemini API key"
+              }
             />
           </label>
           <label>
@@ -1257,10 +1290,13 @@ export default function App() {
         </div>
         {scheduleEnabled && (
           <p className="muted">
-            Trials are spread across a fixed 15-minute window so you can observe latency behavior at the
-            selected time.
+            Warmups and measured trials are spread across one global 15-minute window for this run.
           </p>
         )}
+        <p className="muted">
+          Planned run shape: {plannedScenarioCount} scenario(s) x {trials + warmupTrials} iterations ={" "}
+          {plannedExecutionCount} total calls (includes warmups).
+        </p>
         {stack === "vertex_api" && (
           <div className="grid">
             <label>
@@ -1385,6 +1421,9 @@ export default function App() {
             ? ` | thinking_level=${thinkingLevel}`
             : ` | thinking_budget=${thinkingTokenBudget}`}{" "}
           | cache={cacheIntent}
+        </p>
+        <p className="muted">
+          Cache intent runs only the selected strategy (no hidden baseline scenario is added automatically).
         </p>
       </section>
 
@@ -1706,6 +1745,14 @@ export default function App() {
           <p>
             <strong>Run ID:</strong> {result.run_id}
           </p>
+          <p>
+            <strong>Status:</strong> {result.status}
+          </p>
+          {result.status === "failed" && (
+            <p className="error">
+              Benchmark workflow failed{result.error_message ? `: ${result.error_message}` : "."}
+            </p>
+          )}
           {result.artifacts.schedule_window_start && result.artifacts.schedule_window_end && (
             <p>
               <strong>Scheduled Window:</strong> {result.artifacts.schedule_window_start} to{" "}
@@ -1723,6 +1770,12 @@ export default function App() {
           <p>
             <strong>Recommendation:</strong> {result.recommendation.rationale}
           </p>
+          {hasMixedTtftDefinitions && (
+            <p className="warn">
+              TTFT definitions in this run are mixed ({ttftDefinitionsInRun.join(", ")}). Compare scenarios with
+              the same TTFT definition for fair ranking.
+            </p>
+          )}
           <div className="actions">
             <button type="button" onClick={applyRecommendedSettings}>
               Apply Recommended Settings

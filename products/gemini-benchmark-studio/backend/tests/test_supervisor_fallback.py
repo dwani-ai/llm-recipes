@@ -7,6 +7,8 @@ def test_supervisor_fallback_response() -> None:
     supervisor = SupervisorAgent()
     response = supervisor.fallback_response("synthetic failure")
     assert response.run_id == "failed"
+    assert response.status == "failed"
+    assert response.error_message == "synthetic failure"
     assert response.recommendation.best_scenario_id is None
     assert response.recommendation.confidence == "low"
     assert response.recommendation.ranked_scenarios == []
