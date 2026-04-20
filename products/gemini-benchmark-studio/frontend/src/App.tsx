@@ -335,24 +335,45 @@ Findings:
   },
 ];
 
-const EXPLICIT_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
+const BUDGET_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
   {
-    id: "decision_memo",
-    title: "Decision Memo (default)",
+    id: "budget_decision_memo",
+    title: "Budget Memo (2.5 default)",
     template:
-      "Using {{dataset_name}}, produce a detailed, evidence-backed decision memo for {{goal}}. Return: (1) top findings, (2) trade-offs, (3) prioritized actions, and (4) measurable success criteria.",
+      "Using {{dataset_name}}, produce a concise but rigorous decision memo for {{goal}} within a limited reasoning budget. Return: (1) top findings, (2) major trade-offs, (3) prioritized actions, and (4) measurable success criteria.",
   },
   {
-    id: "root_cause_risk",
-    title: "Root Cause + Risk Plan",
+    id: "budget_root_cause",
+    title: "Budget Root Cause + Risks",
     template:
-      "From {{dataset_name}}, perform deep root-cause analysis for {{goal}}. Return: (1) root causes by impact, (2) risk map with likelihood/severity, (3) mitigation plan with owners, and (4) measurable checkpoints.",
+      "From {{dataset_name}}, perform root-cause analysis for {{goal}} optimized for budgeted reasoning. Return: (1) high-impact root causes, (2) risk map with likelihood/severity, (3) mitigation plan with owners, and (4) measurable checkpoints.",
   },
   {
-    id: "executive_brief",
-    title: "Executive Brief + Roadmap",
+    id: "budget_exec_roadmap",
+    title: "Budget Executive Brief",
     template:
-      "Use {{dataset_name}} to generate an executive brief for {{goal}} with explicit assumptions. Return: (1) current-state diagnosis, (2) strategic options with trade-offs, (3) recommended roadmap by phase, and (4) KPI targets.",
+      "Use {{dataset_name}} to generate an executive brief for {{goal}} with explicit assumptions and concise justification. Return: (1) current-state diagnosis, (2) strategic options with trade-offs, (3) recommended phased roadmap, and (4) KPI targets.",
+  },
+];
+
+const LEVEL_THINKING_PROMPT_PRESETS: PromptTemplatePreset[] = [
+  {
+    id: "level_deep_dossier",
+    title: "Deep Dossier (3.x default)",
+    template:
+      "Using {{dataset_name}}, generate a deep analytical dossier for {{goal}}. Return: (1) layered findings with evidence, (2) trade-off matrix, (3) phased action plan with contingencies, and (4) KPI tree with leading/lagging indicators.",
+  },
+  {
+    id: "level_counterfactuals",
+    title: "Counterfactual Scenario Plan",
+    template:
+      "From {{dataset_name}}, build a scenario-based strategy for {{goal}} using deep thinking. Return: (1) baseline diagnosis, (2) best/base/worst-case counterfactuals, (3) risk controls per scenario, and (4) trigger metrics for plan shifts.",
+  },
+  {
+    id: "level_architecture_review",
+    title: "Architecture + Governance Review",
+    template:
+      "Use {{dataset_name}} to produce a thorough architecture and governance review for {{goal}}. Return: (1) structural bottlenecks, (2) governance gaps, (3) remediation roadmap by phase/owner, and (4) compliance and reliability metrics.",
   },
 ];
 
@@ -437,7 +458,7 @@ export default function App() {
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("medium");
   const [cacheIntent, setCacheIntent] = useState<CacheIntent>(cacheIntentFromMode(DEFAULT_MODE_SELECTION));
   const [benchmarkObjective, setBenchmarkObjective] = useState<BenchmarkObjective>("lowest_latency");
-  const [selectedPromptPresetId, setSelectedPromptPresetId] = useState("decision_memo");
+  const [selectedPromptPresetId, setSelectedPromptPresetId] = useState("budget_decision_memo");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleStartLocal, setScheduleStartLocal] = useState(
     toDateTimeLocalString(new Date(Date.now() + 5 * 60 * 1000))
@@ -488,6 +509,14 @@ export default function App() {
   const modelOptions = useMemo(
     () => STACK_MODEL_OPTIONS[stack] ?? STACK_MODEL_OPTIONS.google_genai,
     [stack]
+  );
+  const currentPromptPresets = useMemo(
+    () => (thinkingCaps.supportsLevel ? LEVEL_THINKING_PROMPT_PRESETS : BUDGET_THINKING_PROMPT_PRESETS),
+    [thinkingCaps]
+  );
+  const promptPresetFamilyLabel = useMemo(
+    () => (thinkingCaps.supportsLevel ? "Gemini 3.x level-aware presets" : "Gemini 2.5 budget-aware presets"),
+    [thinkingCaps]
   );
   const stackCapabilities = useMemo(() => {
     if (stack === "google_genai") {
@@ -577,6 +606,12 @@ export default function App() {
     }
   }, [thinkingMode, thinkingCaps]);
 
+  useEffect(() => {
+    if (!currentPromptPresets.some((item) => item.id === selectedPromptPresetId)) {
+      setSelectedPromptPresetId(currentPromptPresets[0]?.id ?? "");
+    }
+  }, [currentPromptPresets, selectedPromptPresetId]);
+
   const variableMap = useMemo(() => toVariableMap(promptVars), [promptVars]);
 
   async function handlePreviewPrompt() {
@@ -639,7 +674,7 @@ export default function App() {
   }
 
   function applyPromptPreset() {
-    const preset = EXPLICIT_THINKING_PROMPT_PRESETS.find((item) => item.id === selectedPromptPresetId);
+    const preset = currentPromptPresets.find((item) => item.id === selectedPromptPresetId);
     if (!preset) {
       return;
     }
@@ -1371,12 +1406,12 @@ export default function App() {
             Apply Example
           </button>
           <label>
-            Generated Prompt (non-streaming + thinking + explicit cache)
+            Generated Prompt ({promptPresetFamilyLabel})
             <select
               value={selectedPromptPresetId}
               onChange={(event) => setSelectedPromptPresetId(event.target.value)}
             >
-              {EXPLICIT_THINKING_PROMPT_PRESETS.map((item) => (
+              {currentPromptPresets.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.title}
                 </option>
