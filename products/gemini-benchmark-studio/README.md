@@ -354,8 +354,11 @@ Recommendation-level outputs now include:
 - `gate_pass_count`, `gate_fail_count`
 - `overall_acceptance_status`
 
+The generated Studio report markdown (see `report_md` / `acceptance_report_md` in artifacts) ends with a **Report completeness (self-check)** section: a table that verifies artifact files on disk, schedule/evaluation metadata, prompt/template warnings, and whether latency and accuracy aggregates look consistent.
+
 ## Project Layout
 
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — full system architecture (components, data flow, agents, evaluation)
 - `frontend/` - React + Vite app
 - `backend/` - FastAPI API + benchmark engine + multi-agent layer
 

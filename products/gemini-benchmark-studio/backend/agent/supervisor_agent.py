@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from agent.adk_runtime import ADKRuntime
 from agent.analyzer_agent import AnalyzerAgent
@@ -49,13 +49,20 @@ class SupervisorAgent:
             ),
         )
 
-    def _write_final_report(self, response: BenchmarkResponse) -> None:
+    def _write_final_report(
+        self,
+        response: BenchmarkResponse,
+        request: BenchmarkRequest,
+        missing_template_vars: Optional[List[str]] = None,
+    ) -> None:
         report_path_raw = response.artifacts.get("report_md")
         if not report_path_raw:
             return
         report_path = Path(report_path_raw)
         if not report_path.exists():
             return
+
+        missing_template_vars = missing_template_vars or []
 
         def _fmt_num(value: object, digits: int = 3) -> str:
             if isinstance(value, (float, int)):
@@ -140,12 +147,120 @@ class SupervisorAgent:
             for alt in response.recommendation.alternatives:
                 lines.append(f"- {alt}")
 
+        response.artifacts["acceptance_report_md"] = str(report_path)
+
         lines.extend(["", "## Artifacts", ""])
-        for key, value in response.artifacts.items():
+        for key, value in sorted(response.artifacts.items()):
             lines.append(f"- {key}: `{value}`")
 
+        def _file_status(artifact_key: str) -> tuple[str, str]:
+            path_str = response.artifacts.get(artifact_key)
+            if not path_str:
+                return "MISSING", "not listed in artifacts"
+            path_obj = Path(path_str)
+            if path_obj.is_file():
+                return "OK", f"`{path_str}`"
+            return "MISSING", f"file not found: `{path_str}`"
+
+        n_summaries = len(response.summaries)
+        has_ok_trials = any(s.ok_count and s.ok_count > 0 for s in response.summaries)
+        latency_ok = True
+        if has_ok_trials:
+            for s in response.summaries:
+                if s.ok_count and s.ok_count > 0 and s.ttft_p50_s is None:
+                    latency_ok = False
+                    break
+
+        eval_requested = request.evaluation_enabled
+        eval_samples_any = any(
+            (s.evaluation_samples or 0) > 0 or s.accuracy_score is not None for s in response.summaries
+        )
+        if eval_requested:
+            if eval_samples_any:
+                eval_status, eval_detail = _file_status("evaluation_summary_json")
+                if eval_status == "OK":
+                    acc_status = "OK" if any(s.accuracy_score is not None for s in response.summaries) else "WARN"
+                    acc_detail = (
+                        "at least one scenario has accuracy aggregate"
+                        if acc_status == "OK"
+                        else "no accuracy aggregates; check judge errors in raw JSONL"
+                    )
+                else:
+                    acc_status, acc_detail = "MISSING", eval_detail
+            else:
+                acc_status = "WARN"
+                acc_detail = "evaluation enabled but no evaluation samples recorded"
+        else:
+            acc_status, acc_detail = "N/A", "evaluation disabled for this run"
+
+        sched_requested = request.schedule_enabled
+        if sched_requested:
+            has_sched = bool(
+                response.artifacts.get("schedule_window_start")
+                and response.artifacts.get("schedule_window_end")
+            )
+            sched_status, sched_detail = ("OK", "window start/end in artifacts") if has_sched else ("MISSING", "schedule enabled but window not in artifacts")
+        else:
+            sched_status, sched_detail = "N/A", "scheduling not used"
+
+        if missing_template_vars:
+            tmpl_status, tmpl_detail = "WARN", f"missing keys replaced with empty string: {', '.join(missing_template_vars)}"
+        else:
+            tmpl_status, tmpl_detail = "OK", "no missing template variables"
+
+        rendered = response.rendered_prompt or ""
+        prompt_status = "OK" if rendered.strip() else "WARN"
+        prompt_detail = f"{len(rendered)} characters" if rendered.strip() else "empty; fallback may have been used"
+
+        rec = response.recommendation
+        if rec.ranked_scenarios or rec.best_scenario_id:
+            rec_status, rec_detail = "OK", "best scenario and/or ranked rows present"
+        elif n_summaries == 0:
+            rec_status, rec_detail = "WARN", "no scenario summaries"
+        else:
+            rec_status, rec_detail = "WARN", "no eligible winner; see disqualified list"
+
+        gate_detail = (
+            f"pass={rec.gate_pass_count}, fail={rec.gate_fail_count}, status={rec.overall_acceptance_status}"
+        )
+        if eval_requested:
+            gate_status = "OK"
+        else:
+            gate_status = "N/A"
+            gate_detail = "acceptance gates apply only when evaluation is enabled"
+
+        completeness_rows = [
+            ("Run ID", "OK" if response.run_id else "MISSING", f"`{response.run_id}`" if response.run_id else "empty"),
+            ("Scenario summaries", "OK" if n_summaries > 0 else "MISSING", f"{n_summaries} scenario(s)"),
+            ("Raw results (JSONL)", *_file_status("raw_jsonl")),
+            ("Aggregated summary (JSON)", *_file_status("summary_json")),
+            ("Summary CSV", *_file_status("summary_csv")),
+            ("Studio report (this file)", "OK", f"written to `{report_path}`"),
+            ("Evaluation summary JSON", *_file_status("evaluation_summary_json")),
+            ("Scheduled window metadata", sched_status, sched_detail),
+            ("Rendered prompt captured", prompt_status, prompt_detail),
+            ("Prompt template variables", tmpl_status, tmpl_detail),
+            ("Latency metrics (TTFT P50 when trials OK)", "OK" if latency_ok else "WARN", "all OK scenarios have ttft_p50" if latency_ok else "some OK scenarios missing ttft_p50"),
+            ("Accuracy aggregates (evaluation)", acc_status, acc_detail),
+            ("Recommendation / ranking", rec_status, rec_detail),
+            ("Acceptance gate counts", gate_status, gate_detail),
+        ]
+
+        lines.extend(
+            [
+                "",
+                "## Report completeness (self-check)",
+                "",
+                "This section is generated automatically. Use it to verify exports and spot gaps before sign-off.",
+                "",
+                "| Check | Status | Detail |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for label, status, detail in completeness_rows:
+            lines.append(f"| {label} | {status} | {detail} |")
+
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        response.artifacts["acceptance_report_md"] = str(report_path)
 
     def run(self, request: BenchmarkRequest) -> SupervisorResult:
         trace: List[str] = ["SupervisorAgent: starting workflow."]
@@ -228,7 +343,7 @@ class SupervisorAgent:
             reasoning_trace=trace,
             artifacts=worker_output.run_payload["artifacts"],
         )
-        self._write_final_report(response)
+        self._write_final_report(response, request, missing)
         return SupervisorResult(response=response, trace=trace)
 
     def fallback_response(self, error_message: str) -> BenchmarkResponse:
